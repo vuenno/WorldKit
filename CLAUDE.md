@@ -39,8 +39,16 @@ code, whenever the change is worth noting:
 - **Platform:** Windows only (amd64). Don't add code paths, build tags or resources for other OSes/arches.
 - **Never open FiveM's live data.** Copy `%AppData%\CitizenFX\kvs` to a temp folder and read the copy.
 - **User data** lives in `os.UserConfigDir()\WorldKit` (`%AppData%\WorldKit`): `settings.json`
-  and `logs\`. Chat logs are stored raw (one `.txt` per session) and parsed on read; never
-  rewrite or reformat them in place.
+  `logs\` and `screenshots\`. Chat logs are stored raw (one `.txt` per session) and parsed on
+  read; never rewrite or reformat them in place. Screenshots are PNGs WorldKit renders itself
+  (`internal/screenshot`, pure Go via `golang.org/x/image/font`, no GPU); deletes only ever
+  touch that folder. Their font, Arial Bold, is read from `%WINDIR%\Fonts`; never bundle it
+  (its license forbids redistribution).
+- **Diagnostics** go to `%AppData%\WorldKit\diagnostics\` (`internal/diagnostics`, started in
+  `run.go`): `slog` output in `app.log` (previous run: `app.previous.log`) and unrecovered
+  panics/fatal errors in `crash-<UTC start time>.log` via `runtime/debug.SetCrashOutput`.
+  The release build has no console, so check these first when the app misbehaves or closes.
+  `run` must `defer session.End(&runErr)`, never a plain `Close`, or panics lose their trace.
 - No other runtime dependencies without discussion. Run one-off tools with `go run module@version`
   instead of adding them to `go.mod`.
 

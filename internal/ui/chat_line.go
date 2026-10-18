@@ -10,6 +10,7 @@ import (
 	"gioui.org/widget/material"
 
 	"world-kit/internal/chatlog"
+	"world-kit/internal/screenshot"
 )
 
 // chatLine is one saved chat line shown in its in-game color.
@@ -82,4 +83,13 @@ func chatLineColor(record chatlog.Record) color.NRGBA {
 	default:
 		return colorChatSay
 	}
+}
+
+// screenshotLines turns lines into what the screenshot renderer draws, keeping each color.
+func screenshotLines(lines []chatLine) []screenshot.Line {
+	shotLines := make([]screenshot.Line, len(lines))
+	for i, line := range lines {
+		shotLines[i] = screenshot.Line{Text: line.text, Color: line.color}
+	}
+	return shotLines
 }
