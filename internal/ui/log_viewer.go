@@ -76,6 +76,7 @@ func (v *logViewer) receiveRecords() {
 		v.errorText = "Couldn't read this log."
 	}
 	v.records = result.value
+	slog.Debug("log opened", "path", v.session.Path, "lines", len(v.records))
 	v.filters.SetCharacters(chatlog.Characters(v.records))
 	v.applyFilter()
 }
@@ -99,6 +100,7 @@ func (v *logViewer) handleInput(gtx layout.Context) {
 
 // extractSelection saves the selected lines as a screenshot image in the background.
 func (v *logViewer) extractSelection() {
+	slog.Debug("extract", "lines", v.lines.SelectedCount())
 	lines := screenshotLines(v.lines.SelectedLines())
 	v.hasSavedShot = false
 	v.saveErrorText = ""

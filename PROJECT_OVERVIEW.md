@@ -33,7 +33,7 @@ screenshots, kept on the **Log Screenshots** page.
 | Chat capture     | Done: background polling of FiveM's KVS, one `.txt` per session, crash-safe appends |
 | Chat parsing     | Done: `chatlog.Parse` → records with time, kind, speaker, text; `chatlog.Filter` |
 | First-run prompts| Done: FiveM data folder (only if not found), start with Windows (asked once) |
-| Persistence      | `%AppData%\WorldKit\settings.json`, `%AppData%\WorldKit\logs\YYYY\MM\*.txt`, `%AppData%\WorldKit\screenshots\*.png` |
+| Persistence      | `%AppData%\WorldKit\settings.json`, `%AppData%\WorldKit\logs\YYYY\MM\*.txt`, `%AppData%\WorldKit\screenshots\*.png`, `%AppData%\WorldKit\diagnostics\` (`app.log`, `crash-*.log`) |
 | Tests            | Animation, chat archive/parser/filter/library, KVS reader, capture service, settings, status and session texts, background load, screenshot render/store, selection menu placement |
 
 ## Architecture
@@ -98,6 +98,7 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `internal/chatlog/`                    | `Archive` (session files, lock, crash repair), `Parse` (line kinds, midnight rollover), `Library` (list/read sessions), `Filter` (names + kinds), `Characters` (speakers by line count) |
 | `internal/capture/`                    | Background `Service`: polling loop, data folder changes, `Status` |
 | `internal/settings/`                   | `settings.json` load + atomic save                          |
+| `internal/diagnostics/`                | `Start`: `slog` → `app.log`, crash output → `crash-*.log` (empty ones removed) |
 | `internal/autostart/`                  | Start with Windows via the HKCU `Run` registry key          |
 | `internal/ui/logs_page.go`             | Logs page: session list, `sessionRow`, session title/date texts |
 | `internal/ui/log_viewer.go`            | `logViewer`: header (Back, Filters, Copy), filter panel, line list |
@@ -212,6 +213,19 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 - **Not yet verified:** copying the KVS while FiveM is running (a sharing violation is logged and
   retried on the next poll), and whether the game caps the chat buffer size.
 - **`-race` needs CGO**, which the dev machine lacks, so race tests can't run locally.
+- **Crashes are silent in the release build** (no console). Read
+  `%AppData%\WorldKit\diagnostics\crash-*.log` for the panic trace and `app.log` /
+  `app.previous.log` for what led up to it. Under the Claude desktop sandbox, `%AppData%`
+  writes are redirected (see above), so look in the real folder when the app runs normally.
+  A crash file left behind means that run didn't exit cleanly (the next start logs it).
+- **Don't close diagnostics in a plain `defer` in `run`.** A panic in the UI goroutine
+  unwinds through it; closing there released crash output and deleted the empty crash file
+  before the runtime wrote the trace, so the app just vanished. `run` defers
+  `Session.End(&runErr)`, which logs the panic and panics again instead of closing.
+- **`layout.List.ScrollBy` leaves `Position.First` out of range** until the next layout
+  (e.g. -1 after scrolling up at the top). Clamp before indexing per-line data:
+  `chatLineList.firstShownLine`. Dragging a selection above the top of a log crashed the app
+  this way (index -1).
 - **Start with Windows registers the running exe.** Enabling it from `go run` registers a temp
   build; use the release build.
 

@@ -141,12 +141,18 @@ func (l *chatLineList) scrollWhileDraggingPastEdge(y float32) {
 	}
 }
 
+// firstShownLine returns the first line the list drew in the last frame. Between
+// layouts, List.ScrollBy can push Position.First out of range (to -1 when a drag scrolls
+// past the top), so it is clamped to a real line.
+func (l *chatLineList) firstShownLine() int {
+	return max(0, min(l.list.Position.First, len(l.lines)-1))
+}
+
 // lineAt returns the line drawn at y (relative to the list's top) in the last frame,
 // clamped to the first and last line.
 func (l *chatLineList) lineAt(y float32) int {
-	position := l.list.Position
-	line := min(position.First, len(l.lines)-1)
-	top := -position.Offset
+	line := l.firstShownLine()
+	top := -l.list.Position.Offset
 	for line < len(l.lines)-1 && l.rowHeights[line] > 0 && y >= float32(top+l.rowHeights[line]) {
 		top += l.rowHeights[line]
 		line++
@@ -157,12 +163,12 @@ func (l *chatLineList) lineAt(y float32) int {
 // lineBounds returns the top and bottom y of line as drawn in the last frame, clamped to
 // the view: a line scrolled out above sits at 0, one below at the view's bottom.
 func (l *chatLineList) lineBounds(line int) (top, bottom int) {
-	if line < l.list.Position.First {
+	first := l.firstShownLine()
+	if line < first {
 		return 0, 0
 	}
-	position := l.list.Position
-	y := -position.Offset
-	for index := position.First; index < line; index++ {
+	y := -l.list.Position.Offset
+	for index := first; index < line; index++ {
 		y += l.rowHeights[index]
 		if l.rowHeights[index] == 0 || y >= l.viewSize.Y {
 			return l.viewSize.Y, l.viewSize.Y

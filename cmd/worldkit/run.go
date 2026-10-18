@@ -13,6 +13,7 @@ import (
 	"world-kit/internal/autostart"
 	"world-kit/internal/capture"
 	"world-kit/internal/chatlog"
+	"world-kit/internal/diagnostics"
 	"world-kit/internal/screenshot"
 	"world-kit/internal/settings"
 	"world-kit/internal/ui"
@@ -21,12 +22,19 @@ import (
 const appName = "WorldKit"
 
 // run wires WorldKit's services to a window and blocks until the window is closed.
-func run(isMinimized bool) error {
+// The returned error is also written to the diagnostics log, which main can't do: the log
+// is closed by then.
+func run(isMinimized bool) (runErr error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return fmt.Errorf("find app data folder: %w", err)
 	}
 	dataDir := filepath.Join(configDir, appName)
+	diagnosticsSession, err := diagnostics.Start(filepath.Join(dataDir, "diagnostics"))
+	if err != nil {
+		return err
+	}
+	defer diagnosticsSession.End(&runErr)
 	store, err := settings.Open(filepath.Join(dataDir, "settings.json"))
 	if err != nil {
 		return err

@@ -2,6 +2,8 @@
 package ui
 
 import (
+	"log/slog"
+
 	"gioui.org/app"
 	"gioui.org/font"
 	"gioui.org/layout"
@@ -23,7 +25,10 @@ func Run(window *app.Window, services Services) error {
 	for {
 		switch event := window.Event().(type) {
 		case app.DestroyEvent:
+			slog.Info("window destroyed", "error", event.Err)
 			return event.Err
+		case *app.ClosingEvent:
+			slog.Info("window closing")
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, event)
 			shell.Layout(gtx, theme)

@@ -57,7 +57,7 @@ func newLogFilters() *logFilters {
 			{filterOption: filterOption{label: "/b (OOC)"}, kinds: []chatlog.Kind{chatlog.KindOOC}},
 			{filterOption: filterOption{label: "IC"}, kinds: inCharacterKinds},
 		},
-		timestamps:    filterOption{label: "Timestamps", isOn: true},
+		timestamps:    filterOption{label: "Timestamps", isOn: false},
 		characterList: layout.List{Axis: layout.Vertical},
 	}
 }

@@ -44,6 +44,11 @@ code, whenever the change is worth noting:
   (`internal/screenshot`, pure Go via `golang.org/x/image/font`, no GPU); deletes only ever
   touch that folder. Their font, Arial Bold, is read from `%WINDIR%\Fonts`; never bundle it
   (its license forbids redistribution).
+- **Diagnostics** go to `%AppData%\WorldKit\diagnostics\` (`internal/diagnostics`, started in
+  `run.go`): `slog` output in `app.log` (previous run: `app.previous.log`) and unrecovered
+  panics/fatal errors in `crash-<UTC start time>.log` via `runtime/debug.SetCrashOutput`.
+  The release build has no console, so check these first when the app misbehaves or closes.
+  `run` must `defer session.End(&runErr)`, never a plain `Close`, or panics lose their trace.
 - No other runtime dependencies without discussion. Run one-off tools with `go run module@version`
   instead of adding them to `go.mod`.
 
