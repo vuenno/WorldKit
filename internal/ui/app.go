@@ -5,21 +5,21 @@ import (
 	"log/slog"
 
 	"gioui.org/app"
-	"gioui.org/font"
+	"gioui.org/io/system"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/paint"
 	"gioui.org/widget/material"
-	"golang.org/x/exp/shiny/materialdesign/icons"
 
 	"world-kit/assets"
 	"world-kit/internal/capture"
 )
 
-// Run drives the window's event loop until the window is closed.
+// Run drives the window's event loop until the window is closed. The window should be
+// undecorated (app.Decorated(false)): the shell draws its own title bar.
 func Run(window *app.Window, services Services) error {
 	theme := NewTheme()
-	shell := NewShell(services, window.Invalidate)
+	shell := NewShell(services, window.Invalidate, window.Perform)
 	var ops op.Ops
 
 	for {
@@ -29,6 +29,10 @@ func Run(window *app.Window, services Services) error {
 			return event.Err
 		case *app.ClosingEvent:
 			slog.Info("window closing")
+		case app.Win32ViewEvent:
+			shell.services.window = event.HWND // zero once the window is gone
+		case app.ConfigEvent:
+			shell.titleBar.SetMaximized(event.Config.Mode == app.Maximized)
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, event)
 			shell.Layout(gtx, theme)
@@ -37,8 +41,8 @@ func Run(window *app.Window, services Services) error {
 	}
 }
 
-// Shell is the top-level layout: sidebar on the left, the selected page on the right,
-// and any prompt that needs an answer on top.
+// Shell is the top-level layout: sidebar on the left; on the right the title bar above the
+// selected page; and any prompt that needs an answer on top of everything.
 type Shell struct {
 	services        Services
 	logsItem        *NavItem
@@ -46,6 +50,7 @@ type Shell struct {
 	settingsItem    *NavItem
 	shownItem       *NavItem
 	sidebar         *Sidebar
+	titleBar        *titleBar
 	logsPage        *LogsPage
 	screenshotsPage *ScreenshotsPage
 	settingsPage    *SettingsPage
@@ -54,23 +59,25 @@ type Shell struct {
 }
 
 // NewShell creates the shell with WorldKit's navigation destinations. invalidate redraws
-// the window when background work finishes.
-func NewShell(services Services, invalidate func()) *Shell {
-	logsItem := NewNavItem("Logs", icons.ActionDescription)
-	screenshotsItem := NewNavItem("Log Screenshots", icons.ImagePhotoLibrary)
-	settingsItem := NewNavItem("Settings", icons.ActionSettings)
-	settingsPage := NewSettingsPage()
+// the window when background work finishes; perform carries out the title bar's window
+// actions (minimize, maximize, close).
+func NewShell(services Services, invalidate func(), perform func(system.Action)) *Shell {
+	logsItem := NewNavItem("Logs", iconFileText)
+	screenshotsItem := NewNavItem("Log Screenshots", iconImage)
+	settingsItem := NewNavItem("Settings", iconSliders)
+	settingsPage := NewSettingsPage(invalidate)
 	settingsPage.SyncStartupSwitch(services.Startup)
 	return &Shell{
 		services:        services,
 		logsItem:        logsItem,
 		screenshotsItem: screenshotsItem,
 		settingsItem:    settingsItem,
-		sidebar:         NewSidebar(NewLogo(assets.Logo()), logsItem, screenshotsItem, settingsItem),
+		sidebar:         NewSidebar(NewLogo(assets.Logo()), []*NavItem{logsItem, screenshotsItem}, settingsItem),
+		titleBar:        &titleBar{perform: perform},
 		logsPage:        NewLogsPage(invalidate),
 		screenshotsPage: NewScreenshotsPage(invalidate),
 		settingsPage:    settingsPage,
-		dataDirPrompt:   &dataDirPrompt{form: newDataDirForm()},
+		dataDirPrompt:   &dataDirPrompt{form: newDataDirForm(invalidate, buttonPrimary)},
 		startupPrompt:   &startupPrompt{},
 	}
 }
@@ -80,17 +87,35 @@ func (s *Shell) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensi
 	if s.services.Startup != nil && s.startupPrompt.Update(gtx, s.services) {
 		s.settingsPage.SyncStartupSwitch(s.services.Startup)
 	}
+	s.followViewShotLink(gtx)
 	paint.Fill(gtx.Ops, colorAppBackground)
 	dims := layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return s.sidebar.Layout(gtx, theme)
+			return s.sidebar.Layout(gtx, theme, s.services.Capture.Status())
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return s.layoutPage(gtx, theme)
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(s.titleBar.Layout),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return s.layoutPage(gtx, theme) }),
+			)
 		}),
 	)
 	s.layoutPrompt(gtx, theme)
 	return dims
+}
+
+// followViewShotLink opens a screenshot in Log Screenshots when the log viewer's
+// "Screenshot saved · View" toast is clicked.
+func (s *Shell) followViewShotLink(gtx layout.Context) {
+	viewer := s.logsPage.Viewer()
+	if viewer == nil {
+		return
+	}
+	if path, ok := viewer.ViewShotClicked(gtx); ok {
+		s.sidebar.Select(s.screenshotsItem)
+		s.shownItem = s.screenshotsItem
+		s.screenshotsPage.Open(s.services.Screenshots, path)
+	}
 }
 
 func (s *Shell) layoutPage(gtx layout.Context, theme *material.Theme) layout.Dimensions {
@@ -127,16 +152,4 @@ func (s *Shell) layoutPrompt(gtx layout.Context, theme *material.Theme) {
 	if s.services.Startup != nil && !s.services.Settings.Get().HasAnsweredStartupPrompt {
 		s.startupPrompt.Layout(gtx, theme)
 	}
-}
-
-func pageTitle(theme *material.Theme, text string) material.LabelStyle {
-	title := material.Label(theme, textSizePageTitle, text)
-	title.Font.Weight = font.SemiBold
-	return title
-}
-
-func caption(theme *material.Theme, text string) material.LabelStyle {
-	label := material.Label(theme, textSizeCaption, text)
-	label.Color = colorTextSecondary
-	return label
 }

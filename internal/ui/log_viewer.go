@@ -1,10 +1,11 @@
 package ui
 
 import (
-	"fmt"
+	"image"
 	"log/slog"
 
 	"gioui.org/layout"
+	"gioui.org/op"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
@@ -12,35 +13,40 @@ import (
 	"world-kit/internal/screenshot"
 )
 
-// logViewer shows one session's lines, filtered by action and character, as colored lines.
-type logViewer struct {
-	session           chatlog.Session
-	records           []chatlog.Record
-	loader            *backgroundLoad[[]chatlog.Record]
-	errorText         string
-	back              widget.Clickable
-	copy              widget.Clickable
-	filterButton      widget.Clickable
-	isFilterPanelOpen bool
-	filters           *logFilters
-	lines             *chatLineList
-	hasCopied         bool
-	screenshots       ScreenshotStore
-	saver             *backgroundLoad[screenshot.Shot]
-	hasSavedShot      bool
-	saveErrorText     string
+// viewerOptions is what the log viewer needs to show one session.
+type viewerOptions struct {
+	session     chatlog.Session
+	isLive      bool // capture is still writing to this session
+	library     LogLibrary
+	screenshots ScreenshotStore
+	invalidate  func()
 }
 
-func newLogViewer(session chatlog.Session, library LogLibrary, screenshots ScreenshotStore, invalidate func()) *logViewer {
+// logViewer shows one session's lines in their in-game colors, with filters on top. Lines
+// can be selected to copy them or extract them as a screenshot image.
+type logViewer struct {
+	options   viewerOptions
+	records   []chatlog.Record
+	loader    *backgroundLoad[[]chatlog.Record]
+	errorText string
+	back      widget.Clickable
+	copyAll   widget.Clickable
+	filters   *logFilters
+	lines     *chatLineList
+	saver     *backgroundLoad[screenshot.Shot]
+	savedShot string // path of the last saved screenshot, for the toast's View
+	toast     toast
+}
+
+func newLogViewer(options viewerOptions) *logViewer {
 	v := &logViewer{
-		session:     session,
-		loader:      newBackgroundLoad[[]chatlog.Record](invalidate),
-		filters:     newLogFilters(),
-		lines:       newChatLineList(),
-		screenshots: screenshots,
-		saver:       newBackgroundLoad[screenshot.Shot](invalidate),
+		options: options,
+		loader:  newBackgroundLoad[[]chatlog.Record](options.invalidate),
+		filters: newLogFilters(),
+		lines:   newChatLineList(),
+		saver:   newBackgroundLoad[screenshot.Shot](options.invalidate),
 	}
-	v.loader.Start(func() ([]chatlog.Record, error) { return library.Records(session.Path) })
+	v.loader.Start(func() ([]chatlog.Record, error) { return options.library.Records(options.session.Path) })
 	return v
 }
 
@@ -49,19 +55,30 @@ func (v *logViewer) BackClicked(gtx layout.Context) bool {
 	return v.back.Clicked(gtx)
 }
 
-// Layout handles input, then draws the header, the filter panel when open and the session text.
+// ViewShotClicked reports the screenshot to open when the user clicks View on the
+// "Screenshot saved" toast.
+func (v *logViewer) ViewShotClicked(gtx layout.Context) (string, bool) {
+	if !v.toast.ActionClicked(gtx) {
+		return "", false
+	}
+	return v.savedShot, true
+}
+
+// Layout handles input, then draws the header, filters and lines.
 func (v *logViewer) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	v.receiveRecords()
-	v.receiveSavedShot()
+	v.receiveSavedShot(gtx)
 	v.handleInput(gtx)
-	return layout.UniformInset(spacingLarge).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	inset := layout.Inset{Left: spacingPage, Right: spacingPage, Top: spacingSmall, Bottom: spacingXLarge}
+	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return v.layoutHeader(gtx, theme) }),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return v.layoutFilterPanel(gtx, theme) }),
+			layout.Rigid(layout.Spacer{Height: spacingLarge}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return v.filters.LayoutToolbar(gtx, theme) }),
 			layout.Rigid(layout.Spacer{Height: spacingMedium}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return v.layoutSummary(gtx, theme) }),
-			layout.Rigid(layout.Spacer{Height: spacingSmall}.Layout),
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return v.layoutText(gtx, theme) }),
+			layout.Rigid(layout.Spacer{Height: spacingMedium}.Layout),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return v.layoutPanel(gtx, theme) }),
 		)
 	})
 }
@@ -72,152 +89,158 @@ func (v *logViewer) receiveRecords() {
 		return
 	}
 	if result.err != nil {
-		slog.Error("read chat session", "path", v.session.Path, "error", result.err)
+		slog.Error("read chat session", "path", v.options.session.Path, "error", result.err)
 		v.errorText = "Couldn't read this log."
 	}
 	v.records = result.value
-	slog.Debug("log opened", "path", v.session.Path, "lines", len(v.records))
 	v.filters.SetCharacters(chatlog.Characters(v.records))
 	v.applyFilter()
 }
 
-func (v *logViewer) handleInput(gtx layout.Context) {
-	if v.filterButton.Clicked(gtx) {
-		v.isFilterPanelOpen = !v.isFilterPanelOpen
-	}
-	if v.filters.Update(gtx) {
-		v.applyFilter()
-	}
-	isCopyRequested := v.lines.Update(gtx)
-	if v.copy.Clicked(gtx) || isCopyRequested {
-		copyToClipboard(gtx, v.lines.CopyText())
-		v.hasCopied = true
-	}
-	if v.lines.ExtractClicked(gtx) {
-		v.extractSelection()
-	}
-}
-
-// extractSelection saves the selected lines as a screenshot image in the background.
-func (v *logViewer) extractSelection() {
-	slog.Debug("extract", "lines", v.lines.SelectedCount())
-	lines := screenshotLines(v.lines.SelectedLines())
-	v.hasSavedShot = false
-	v.saveErrorText = ""
-	v.saver.Start(func() (screenshot.Shot, error) { return v.screenshots.Save(lines) })
-}
-
-func (v *logViewer) receiveSavedShot() {
+func (v *logViewer) receiveSavedShot(gtx layout.Context) {
 	result, ok := v.saver.Result()
 	if !ok {
 		return
 	}
 	if result.err != nil {
 		slog.Error("save chat screenshot", "error", result.err)
-		v.saveErrorText = "Couldn't save the screenshot."
+		v.toast.ShowError(gtx.Now, "Couldn't save the screenshot.")
 		return
 	}
-	v.hasSavedShot = true
+	v.savedShot = result.value.Path
+	v.toast.Show(gtx.Now, "Screenshot saved", "View")
+}
+
+func (v *logViewer) handleInput(gtx layout.Context) {
+	if v.filters.Update(gtx) {
+		v.applyFilter()
+	}
+	if v.lines.Update(gtx) {
+		v.copy(gtx, v.lines.CopyText(), v.lines.SelectedCount())
+	}
+	if v.copyAll.Clicked(gtx) {
+		v.copy(gtx, v.lines.AllText(), v.lines.Len())
+	}
+	if v.lines.ExtractClicked(gtx) {
+		v.extractSelection()
+	}
+}
+
+func (v *logViewer) copy(gtx layout.Context, text string, lineCount int) {
+	copyToClipboard(gtx, text)
+	if lineCount == 0 {
+		lineCount = v.lines.Len() // Ctrl+C with nothing selected copies every shown line
+	}
+	v.toast.Show(gtx.Now, "Copied "+plural(lineCount, "line", "lines"), "")
+}
+
+// extractSelection saves the selected lines as a screenshot image in the background.
+func (v *logViewer) extractSelection() {
+	lines := screenshotLines(v.lines.SelectedLines())
+	v.saver.Start(func() (screenshot.Shot, error) { return v.options.screenshots.Save(lines) })
 }
 
 func (v *logViewer) applyFilter() {
-	visible := v.filters.Filter().Apply(v.records)
-	v.lines.SetLines(newChatLines(visible, v.filters.ShowsTimestamps()))
-	v.hasCopied = false
+	var visible []chatlog.Record
+	for _, record := range v.filters.Filter().Apply(v.records) {
+		if v.filters.Matches(record) {
+			visible = append(visible, record)
+		}
+	}
+	showsTimestamps := v.filters.ShowsTimestamps()
+	v.lines.SetLines(newChatLines(visible, showsTimestamps), showsTimestamps)
 }
 
 func (v *logViewer) layoutHeader(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}
 	return row.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return secondaryButton(&v.back, "Back").Layout(gtx, theme)
+			return iconButton(&v.back, iconArrowLeft).Layout(gtx, theme)
 		}),
-		layout.Rigid(layout.Spacer{Width: spacingMedium}.Layout),
+		layout.Rigid(layout.Spacer{Width: spacingLarge}.Layout),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(pageTitle(theme, sessionTitle(v.session)).Layout),
-				layout.Rigid(caption(theme, sessionNumberText(v.session)+" · "+sessionUpdatedText(v.session)).Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return v.layoutTitle(gtx, theme) }),
+				layout.Rigid(layout.Spacer{Height: spacingTiny}.Layout),
+				layout.Rigid(secondaryText(theme, v.metaText()).Layout),
 			)
 		}),
-		layout.Rigid(layout.Spacer{Width: spacingMedium}.Layout),
+		layout.Rigid(layout.Spacer{Width: spacingLarge}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			activeCount := v.filters.ActiveCount()
-			return toggleButton(&v.filterButton, filterButtonLabel(activeCount), activeCount > 0).Layout(gtx, theme)
-		}),
-		layout.Rigid(layout.Spacer{Width: spacingSmall}.Layout),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return primaryButton(&v.copy, "Copy").Layout(gtx, theme)
+			return secondaryButton(&v.copyAll, "Copy all").withIcon(iconCopy).Layout(gtx, theme)
 		}),
 	)
 }
 
-// filterButtonLabel names the button and how many filter options are on.
-func filterButtonLabel(activeCount int) string {
-	if activeCount == 0 {
-		return "Filters"
-	}
-	return fmt.Sprintf("Filters (%d)", activeCount)
+func (v *logViewer) layoutTitle(gtx layout.Context, theme *material.Theme) layout.Dimensions {
+	row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}
+	return row.Layout(gtx,
+		layout.Rigid(screenTitle(theme, dayAndTimeText(v.options.session.Started, gtx.Now)).Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if !v.options.isLive {
+				return layout.Dimensions{}
+			}
+			return layout.Inset{Left: spacingMedium - spacingTiny/2}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return statusPill{label: "Live", color: colorLive}.Layout(gtx, theme)
+			})
+		}),
+	)
 }
 
-func (v *logViewer) layoutFilterPanel(gtx layout.Context, theme *material.Theme) layout.Dimensions {
-	if !v.isFilterPanelOpen {
-		return layout.Dimensions{}
+func (v *logViewer) metaText() string {
+	session := v.options.session
+	text := sessionNumberText(session)
+	if v.records != nil {
+		text += " · " + plural(chatlog.Summarize(v.records).Lines, "line", "lines")
 	}
-	return layout.Inset{Top: spacingMedium}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return v.filters.Layout(gtx, theme)
-	})
+	return text + " · updated " + session.Updated.UTC().Format(clockLayout)
 }
 
 func (v *logViewer) layoutSummary(gtx layout.Context, theme *material.Theme) layout.Dimensions {
-	if v.errorText != "" {
+	switch {
+	case v.errorText != "":
 		return errorCaption(gtx, theme, v.errorText)
+	case v.loader.IsLoading() && v.records == nil:
+		return caption(theme, "Loading…").Layout(gtx)
+	default:
+		return v.filters.LayoutSummary(gtx, theme, v.lines.Len(), len(v.records))
 	}
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(caption(theme, v.summaryText()).Layout),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return errorCaption(gtx, theme, v.saveErrorText)
-		}),
-	)
 }
 
-func (v *logViewer) summaryText() string {
-	if v.loader.IsLoading() && v.records == nil {
-		return "Loading…"
-	}
-	summary := fmt.Sprintf("Showing %d of %d lines.", v.lines.Len(), len(v.records))
-	if count := v.lines.SelectedCount(); count > 0 {
-		summary += fmt.Sprintf(" %d selected.", count)
-	}
-	if v.hasCopied {
-		summary += " Copied to the clipboard."
-	}
-	if v.saver.IsLoading() {
-		summary += " Saving screenshot…"
-	} else if v.hasSavedShot {
-		summary += " Screenshot saved to Log Screenshots."
-	}
-	return summary
-}
-
-// layoutText draws the session's lines on a panel that fills the remaining height.
-func (v *logViewer) layoutText(gtx layout.Context, theme *material.Theme) layout.Dimensions {
+// layoutPanel draws the lines on the dark log panel, with the toast in its bottom-right corner.
+func (v *logViewer) layoutPanel(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	gtx.Constraints.Min = gtx.Constraints.Max
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			return outlinedSurface(gtx, colorSurface)
+			return outlinedSurface(gtx, colorSidebar, colorDivider, radiusCard)
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min = gtx.Constraints.Max
-			return layout.UniformInset(spacingMedium).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: spacingMedium, Bottom: spacingMedium}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return v.layoutLines(gtx, theme)
 			})
+		}),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+			return v.layoutToast(gtx, theme)
 		}),
 	)
 }
 
 func (v *logViewer) layoutLines(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	if v.lines.Len() == 0 && v.records != nil {
-		return caption(theme, "No lines match these filters.").Layout(gtx)
+		return layout.Center.Layout(gtx, secondaryText(theme, "No lines match these filters.").Layout)
 	}
 	return v.lines.Layout(gtx, theme)
+}
+
+// layoutToast pins the toast to the panel's bottom-right corner.
+func (v *logViewer) layoutToast(gtx layout.Context, theme *material.Theme) layout.Dimensions {
+	recording := op.Record(gtx.Ops)
+	dims := v.toast.Layout(gtx, theme)
+	toast := recording.Stop()
+	margin := gtx.Dp(spacingLarge)
+	origin := image.Pt(gtx.Constraints.Max.X-dims.Size.X-margin, gtx.Constraints.Max.Y-dims.Size.Y-margin)
+	defer op.Offset(origin).Push(gtx.Ops).Pop()
+	toast.Add(gtx.Ops)
+	return layout.Dimensions{Size: gtx.Constraints.Max}
 }

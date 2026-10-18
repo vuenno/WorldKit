@@ -1,9 +1,9 @@
-// Package assets embeds WorldKit's images so the binary is self-contained.
+// Package assets embeds WorldKit's images and fonts so the binary is self-contained.
 package assets
 
 import (
 	"bytes"
-	_ "embed"
+	"embed"
 	"image"
 	"image/png"
 	"sync"
@@ -11,6 +11,12 @@ import (
 
 //go:embed logo.png
 var logoPNG []byte
+
+// Fonts holds the UI typefaces, Geist and Geist Mono (OFL-1.1, see fonts/OFL.txt), as
+// fonts/*.ttf: one static file per weight.
+//
+//go:embed fonts/*.ttf
+var Fonts embed.FS
 
 // Logo returns the decoded 384×384 WorldKit logo with a transparent background.
 var Logo = sync.OnceValue(func() image.Image {

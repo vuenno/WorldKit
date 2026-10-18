@@ -14,6 +14,7 @@ import (
 	"world-kit/internal/capture"
 	"world-kit/internal/chatlog"
 	"world-kit/internal/diagnostics"
+	"world-kit/internal/folderpicker"
 	"world-kit/internal/screenshot"
 	"world-kit/internal/settings"
 	"world-kit/internal/ui"
@@ -60,6 +61,7 @@ func run(isMinimized bool) (runErr error) {
 
 	services := newServices(captureService, store)
 	services.Logs = chatlog.NewLibrary(archiveDir)
+	services.Folders = folderpicker.Dialog{}
 	services.Screenshots = screenshot.NewStore(filepath.Join(dataDir, "screenshots"))
 	return ui.Run(window, services)
 }
@@ -68,8 +70,10 @@ func newWindow(isMinimized bool) *app.Window {
 	window := new(app.Window)
 	window.Option(
 		app.Title(appName),
-		app.Size(unit.Dp(960), unit.Dp(600)),
-		app.MinSize(unit.Dp(640), unit.Dp(400)),
+		// WorldKit draws its own title bar (ui.titleBar); Windows still resizes and snaps it.
+		app.Decorated(false),
+		app.Size(unit.Dp(1280), unit.Dp(820)),
+		app.MinSize(unit.Dp(900), unit.Dp(600)),
 	)
 	if isMinimized {
 		window.Option(app.Minimized.Option())

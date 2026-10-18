@@ -17,12 +17,14 @@ import (
 )
 
 // chatLineList is a scrollable list of colored chat lines where whole lines can be selected:
-// press and drag across lines, Shift+click to extend, Ctrl+A for all, Ctrl+C to copy.
+// press and drag across lines, Shift+click to extend, Ctrl+A for all, Ctrl+C to copy,
+// Esc to clear.
 // Once a selection is made, a small menu pops up over it (selectionMenu).
 // Lines are drawn one label each so every line keeps its own color; a text editor would
 // allow partial-line selection but can only draw one color.
 type chatLineList struct {
 	lines      []chatLine
+	hasTimes   bool // lines show timestamps, so the time column is reserved
 	list       widget.List
 	selection  lineSelection
 	menu       selectionMenu
@@ -34,9 +36,10 @@ func newChatLineList() *chatLineList {
 	return &chatLineList{list: widget.List{List: layout.List{Axis: layout.Vertical}}}
 }
 
-// SetLines replaces the lines and clears the selection.
-func (l *chatLineList) SetLines(lines []chatLine) {
+// SetLines replaces the lines and clears the selection. hasTimes reserves the timestamp column.
+func (l *chatLineList) SetLines(lines []chatLine, hasTimes bool) {
 	l.lines = lines
+	l.hasTimes = hasTimes
 	l.rowHeights = make([]int, len(lines))
 	l.selection.Clear()
 	l.menu.Close()
@@ -61,7 +64,7 @@ func (l *chatLineList) SelectedLines() []chatLine {
 	return l.lines[first : last+1]
 }
 
-// ExtractClicked reports whether Extract was clicked in the selection menu.
+// ExtractClicked reports whether Extract image was clicked in the selection menu.
 func (l *chatLineList) ExtractClicked(gtx layout.Context) bool {
 	return l.menu.ExtractClicked(gtx)
 }
@@ -74,15 +77,20 @@ func (l *chatLineList) CopyText() string {
 	return joinChatLines(l.lines)
 }
 
-// Update handles mouse selection and shortcuts. It reports whether Ctrl+C asked for a copy.
+// Update handles mouse selection, the selection menu's Copy and ×, and shortcuts. It
+// reports whether Ctrl+C or Copy asked for a copy.
 func (l *chatLineList) Update(gtx layout.Context) bool {
-	isCopyRequested := false
+	isCopyRequested := l.menu.CopyClicked(gtx)
+	if l.menu.ClearClicked(gtx) {
+		l.clearSelection()
+	}
 	for {
 		ev, ok := gtx.Event(
 			pointer.Filter{Target: l, Kinds: pointer.Press | pointer.Drag | pointer.Release},
 			key.FocusFilter{Target: l},
 			key.Filter{Focus: l, Name: "C", Required: key.ModShortcut},
 			key.Filter{Focus: l, Name: "A", Required: key.ModShortcut},
+			key.Filter{Focus: l, Name: key.NameEscape},
 		)
 		if !ok {
 			return isCopyRequested
@@ -123,12 +131,21 @@ func (l *chatLineList) handleKey(ev key.Event) bool {
 	if ev.State != key.Press {
 		return false
 	}
+	if ev.Name == key.NameEscape {
+		l.clearSelection()
+		return false
+	}
 	if ev.Name == "A" {
 		l.selection.SelectAll(len(l.lines))
 		l.menu.Open(l.viewSize.X / 2)
 		return false
 	}
 	return ev.Name == "C"
+}
+
+func (l *chatLineList) clearSelection() {
+	l.selection.Clear()
+	l.menu.Close()
 }
 
 // scrollWhileDraggingPastEdge lets a drag select lines that are scrolled out of view.
@@ -193,11 +210,8 @@ func (l *chatLineList) layoutLines(gtx layout.Context, theme *material.Theme) la
 	event.Op(gtx.Ops, l)
 	pointer.CursorText.Add(gtx.Ops)
 
-	list := material.List(theme, &l.list)
-	list.Indicator.Color = colorBorder
-	list.Indicator.HoverColor = colorTextSecondary
-	return list.Layout(gtx, len(l.lines), func(gtx layout.Context, index int) layout.Dimensions {
-		dims := l.lines[index].Layout(gtx, theme, l.selection.Contains(index))
+	return styledList(theme, &l.list).Layout(gtx, len(l.lines), func(gtx layout.Context, index int) layout.Dimensions {
+		dims := l.lines[index].Layout(gtx, theme, l.selection.Contains(index), l.hasTimes)
 		l.rowHeights[index] = dims.Size.Y
 		return dims
 	})
@@ -211,7 +225,7 @@ func (l *chatLineList) layoutMenu(gtx layout.Context, theme *material.Theme) {
 		return
 	}
 	recording := op.Record(gtx.Ops)
-	menuDims := l.menu.Layout(gtx, theme)
+	menuDims := l.menu.Layout(gtx, theme, last-first+1)
 	menu := recording.Stop()
 
 	top, _ := l.lineBounds(first)
@@ -224,4 +238,9 @@ func (l *chatLineList) layoutMenu(gtx layout.Context, theme *material.Theme) {
 // copyToClipboard puts text on the system clipboard.
 func copyToClipboard(gtx layout.Context, text string) {
 	gtx.Execute(clipboard.WriteCmd{Type: "application/text", Data: io.NopCloser(strings.NewReader(text))})
+}
+
+// AllText returns every line, selected or not.
+func (l *chatLineList) AllText() string {
+	return joinChatLines(l.lines)
 }

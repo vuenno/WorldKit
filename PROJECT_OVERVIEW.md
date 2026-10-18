@@ -22,51 +22,50 @@ screenshots, kept on the **Log Screenshots** page.
 
 | Area             | Status                                                                 |
 |------------------|------------------------------------------------------------------------|
-| App shell        | Done: window, dark background, sidebar + page area                     |
-| Sidebar          | Done: collapsible (200 ↔ 58 dp), 200 ms ease-in-out animation, hover/active states |
-| Navigation       | Done: Logs, Log Screenshots, Settings (Home/Explore/Map/Library were removed for now) |
-| Logs page        | Done: saved sessions newest first (start time, last updated, session #) + capture status; reloads when shown and after new lines are saved |
-| Log viewer       | Done: lines in GTA:W's in-game chat colors (12 sp, scrollbar), Filters panel: actions (/me, /do, /b, IC), auto-detected characters, show/hide timestamps; drag/Shift+click/Ctrl+A to select lines; Copy or Ctrl+C copies the selection (or all visible lines); a horizontal popup menu over the selection offers **Extract** (save as a screenshot image) |
-| Log Screenshots  | Done: saved screenshots newest first (1:1 preview, save date, size); open one in full; Show in folder; Delete (with confirmation) |
-| Settings page    | Done: capture status, open logs folder, FiveM data folder, start with Windows |
-| Branding         | Done: logo in sidebar header, exe/title bar/taskbar icon               |
+| App shell        | Done: undecorated window with WorldKit's own title bar (drag area, minimize/maximize/close), sidebar + page area |
+| Look             | Done: redesign from the **WorldKit Redesign** canvas — dark graphite ground, one orange accent, Geist + Geist Mono, line icons |
+| Sidebar          | Done: collapsible (232 ↔ 66 dp, 200 ms), brand, Logs / Log Screenshots, live capture status card, Settings at the bottom |
+| Logs page        | Done: "Live now" card for the session being captured; sessions grouped Today / Yesterday / Earlier this week / month, each with start time, duration, characters, line count and a kind bar; search by character or date |
+| Log viewer       | Done: always-visible toolbar (find text, kind segments All/IC/me/do/b/PMs, Characters menu, timestamps switch), filter chips + Clear filters, timestamp column, drag/Shift+click/Ctrl+A/Esc selection, floating selection bar (Copy, **Extract image**, ×), toasts ("Screenshot saved · View" opens it) |
+| Log Screenshots  | Done: gallery grouped by day, checkerboard 1:1 previews, hover actions (Show in folder, Delete); detail view with Transparent/Dark/Light backdrop and details; delete with confirmation |
+| Settings page    | Done: capture status, FiveM data folder with **Browse…** (Windows folder dialog), start with Windows switch, logs/screenshots folders |
+| Branding         | Done: logo in sidebar header, exe/taskbar icon                         |
 | Chat capture     | Done: background polling of FiveM's KVS, one `.txt` per session, crash-safe appends |
-| Chat parsing     | Done: `chatlog.Parse` → records with time, kind, speaker, text; `chatlog.Filter` |
-| First-run prompts| Done: FiveM data folder (only if not found), start with Windows (asked once) |
+| Chat parsing     | Done: `chatlog.Parse` → records with time, kind, speaker, text; `chatlog.Filter`; `chatlog.Summarize` |
+| First-run prompts| Done: FiveM data folder (only if not found; Browse… or type), start with Windows (asked once) |
 | Persistence      | `%AppData%\WorldKit\settings.json`, `%AppData%\WorldKit\logs\YYYY\MM\*.txt`, `%AppData%\WorldKit\screenshots\*.png`, `%AppData%\WorldKit\diagnostics\` (`app.log`, `crash-*.log`) |
-| Tests            | Animation, chat archive/parser/filter/library, KVS reader, capture service, settings, status and session texts, background load, screenshot render/store, selection menu placement |
+| Tests            | Animation, chat archive/parser/filter/library/summary, KVS reader, capture service, settings, diagnostics, folder picker setup, screenshot render/store, UI texts (days, durations, counts), filters, chat lines, selection menu placement, icons, gallery layout |
 
 ## Architecture
 
 ```
 main()  (-minimized flag)               cmd/worldkit/main.go
- └─ run()                               cmd/worldkit/run.go  wiring: settings, capture, autostart, window
+ └─ run()                               cmd/worldkit/run.go  wiring: diagnostics, settings, capture, autostart, window
      ├─ capture.Service.Run(ctx)        internal/capture     goroutine, polls every 3 s
      │   ├─ fivem.ReadStamp / ReadChatLog   internal/fivem   copy KVS → temp, goleveldb read-only
      │   └─ chatlog.Archive.Save        internal/chatlog     append new lines to the session file
      └─ ui.Run(window, Services)        internal/ui/app.go   event loop: one Shell.Layout per frame
-         └─ Shell                       internal/ui/app.go   sidebar + selected page + prompt
-             ├─ Sidebar                 internal/ui/sidebar.go
-             │   ├─ header: toggle button + brand (Logo + "WorldKit"), fades when collapsing
-             │   ├─ NavItem × 3 (Logs, Log Screenshots, Settings) ──► navRow (shared icon + label row renderer)
-             │   └─ expandAnimation     internal/ui/animation.go
+         └─ Shell                       internal/ui/app.go   sidebar | title bar over the page | prompt
+             ├─ Sidebar                 internal/ui/sidebar.go  brand (move area), NavItems, captureCard, Settings
+             ├─ titleBar                internal/ui/title_bar.go move area + caption buttons → window.Perform
              ├─ page: LogsPage | ScreenshotsPage | SettingsPage
-             │   ├─ LogsPage            internal/ui/logs_page.go  sessionRow list ──► logViewer
-             │   │   ├─ chatlog.Library.Sessions / Records    read off the UI goroutine (backgroundLoad)
-             │   │   └─ logViewer       internal/ui/log_viewer.go chatlog.Filter → chatLineList (colored lines, line selection)
-             │   │       └─ selectionMenu → Extract → screenshot.Store.Save (background) → PNG
-             │   └─ ScreenshotsPage     internal/ui/screenshots_page.go shotCard list ──► screenshotView (full image, delete)
-             │       └─ screenshot.Store.List / Load / Delete            off the UI goroutine (backgroundLoad)
+             │   ├─ LogsPage            internal/ui/logs_page.go  liveCard + sessionRows ──► logViewer
+             │   │   ├─ loadSessionEntries: Library.Sessions + Records → chatlog.Summarize (backgroundLoad)
+             │   │   └─ logViewer       internal/ui/log_viewer.go logFilters → chatLineList
+             │   │       └─ selectionMenu → Extract image → screenshot.Store.Save (background) → toast → View
+             │   ├─ ScreenshotsPage     internal/ui/screenshots_page.go shotCards ──► screenshotView; shotDeletion
+             │   └─ SettingsPage        internal/ui/settings_page.go dataDirForm (Browse… → folderpicker)
              └─ prompt: dataDirPrompt (capture needs a folder) | startupPrompt (not answered yet)
-Logo                                    internal/ui/logo.go  resamples per pixel size, cached
-theme tokens (colors, sizes, timing)    internal/ui/theme.go mirrors DESIGN.md
-assets.Logo()                           assets/assets.go     embedded logo.png, decoded once
+controls, text styles, icons            internal/ui/button.go, controls.go, text.go, icons.go
+theme tokens + fonts                    internal/ui/theme.go (mirrors DESIGN.md), fonts.go (embedded Geist)
+assets.Logo(), assets.Fonts             assets/assets.go     embedded logo.png and fonts/*.ttf
 ```
 
 The UI talks to domain code only through the small interfaces in `ui.Services`
-(`CaptureService`, `SettingsStore`, `LogLibrary`, `ScreenshotStore`, `StartupEntry`); capture calls
-`window.Invalidate` when its status changes, and so does `backgroundLoad` when a disk read
-finishes.
+(`CaptureService`, `SettingsStore`, `LogLibrary`, `ScreenshotStore`, `StartupEntry`,
+`FolderPicker`); capture calls `window.Invalidate` when its status changes, and so does
+`backgroundLoad` when a disk read finishes. `Run` also records the window handle
+(`app.Win32ViewEvent`) so the folder dialog is modal to WorldKit.
 
 ### Chat capture data flow
 
@@ -82,8 +81,9 @@ finishes.
 4. Files: `%AppData%\WorldKit\logs\2026\10\2026-10-18_095701.txt`, exactly as the game wrote them.
    `chatlog.Parse` turns a file into records when needed.
 5. The Logs page lists files via `chatlog.Library` (read-only; start time from the file name,
-   "last updated" from its modification time, session # by age). The viewer parses one file and
-   shows the lines that pass `chatlog.Filter`, still exactly as stored.
+   "last updated" from its modification time, session # by age) and parses each one for its
+   summary. The viewer parses one file and shows the lines that pass the filters, still exactly
+   as stored.
 
 Gio is immediate-mode: every frame, `Layout` methods handle input first, then draw. Widget state
 (`widget.Clickable`, animation state, selection) lives in structs that persist across frames.
@@ -93,37 +93,44 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | Path                                   | Purpose                                                     |
 |----------------------------------------|-------------------------------------------------------------|
 | `cmd/worldkit/main.go`                 | Parses `-minimized`, starts `run` and the Gio main loop     |
-| `cmd/worldkit/run.go`                  | Builds settings, capture service, startup entry, window (960×600, min 640×400) |
+| `cmd/worldkit/run.go`                  | Builds diagnostics, settings, capture, folder picker, startup entry, undecorated window (1280×820, min 900×600) |
 | `internal/fivem/`                      | Finds FiveM's KVS, copies it, reads the GTA World chat log; MessagePack string decoder |
-| `internal/chatlog/`                    | `Archive` (session files, lock, crash repair), `Parse` (line kinds, midnight rollover), `Library` (list/read sessions), `Filter` (names + kinds), `Characters` (speakers by line count) |
+| `internal/chatlog/`                    | `Archive` (session files, lock, crash repair), `Parse` (line kinds, midnight rollover), `Library` (list/read sessions), `Filter` (names + kinds), `Characters` (speakers by line count), `Summarize` (counts by kind, time span) |
 | `internal/capture/`                    | Background `Service`: polling loop, data folder changes, `Status` |
 | `internal/settings/`                   | `settings.json` load + atomic save                          |
-| `internal/diagnostics/`                | `Start`: `slog` → `app.log`, crash output → `crash-*.log` (empty ones removed) |
+| `internal/diagnostics/`                | `Start`: `slog` → `app.log`, crash output → `crash-*.log`; `End`/`Close` |
+| `internal/folderpicker/`               | Windows "Select folder" dialog (`IFileOpenDialog` via COM, no CGO) |
 | `internal/autostart/`                  | Start with Windows via the HKCU `Run` registry key          |
-| `internal/ui/logs_page.go`             | Logs page: session list, `sessionRow`, session title/date texts |
-| `internal/ui/log_viewer.go`            | `logViewer`: header (Back, Filters, Copy), filter panel, line list |
-| `internal/ui/log_filters.go`           | `logFilters`: action + character options → `chatlog.Filter` |
-| `internal/ui/wrap.go`                  | `layoutWrapped`: left-to-right layout that wraps to new rows |
-| `internal/ui/chat_line.go`             | `chatLine` (one colored line), `chatLineColor` (kind → in-game color) |
-| `internal/ui/chat_line_list.go`        | `chatLineList`: scrolling lines, mouse/keyboard line selection, copy text, places the selection menu |
-| `internal/ui/selection_menu.go`        | `selectionMenu` (horizontal popup over a selection: Extract), `menuItem`, `selectionMenuOrigin` |
 | `internal/screenshot/`                 | `Render` (lines → transparent PNG, in-game look), `Store` (save/list/load/delete in `screenshots\`) |
-| `internal/ui/screenshots_page.go`      | Log Screenshots page: `shotCard` list with 1:1 previews, `loadShots` |
-| `internal/ui/screenshot_view.go`       | `screenshotView`: one screenshot in full, Show in folder, Delete + confirm dialog |
+| `internal/ui/app.go`                   | Event loop (window events, maximize state, HWND), `Shell` (pages, prompts, View link) |
+| `internal/ui/title_bar.go`             | `titleBar`, `moveArea`, caption buttons and glyphs          |
+| `internal/ui/sidebar.go`               | `Sidebar`, `NavItem`, `navRow`, `captureCard` (+ `captureCardTexts`) |
+| `internal/ui/logs_page.go`             | Logs page: `loadSessionEntries`, `liveCard`, `sessionRow`, `kindBar`, `styledList` |
+| `internal/ui/log_viewer.go`            | `logViewer`: header, toolbar, summary row, chat panel, toast |
+| `internal/ui/log_filters.go`           | `logFilters`: find, kind segments, characters menu (deferred popover), chips, timestamps |
+| `internal/ui/chat_line.go`             | `chatLine` (time column + colored text), `chatLineColor`, `screenshotLines` |
+| `internal/ui/chat_line_list.go`        | `chatLineList`: scrolling lines, selection, copy text, places the selection bar |
+| `internal/ui/selection_menu.go`        | `selectionMenu` (count, Copy, Extract image, ×), `selectionMenuOrigin` |
 | `internal/ui/line_selection.go`        | `lineSelection`: anchor/end range of whole lines (pure logic, tested) |
+| `internal/ui/screenshots_page.go`      | Log Screenshots gallery: `shotCard`, day groups, checkerboard, 1:1 image drawing |
+| `internal/ui/screenshot_view.go`       | `screenshotView` (detail, backdrops, details card), `shotDeletion` (confirm + delete) |
+| `internal/ui/settings_page.go`         | Settings page: `settingsCard`, `settingRow`, `pathRow`      |
+| `internal/ui/capture_ui.go`            | `ui.Services` + interfaces, status text, `dataDirForm` (Browse…), first-run prompts, `openFolder` |
+| `internal/ui/button.go`                | `button`: primary / secondary / ghost / danger / icon       |
+| `internal/ui/controls.go`              | Segmented control, switch, chip, status pill, badge, link, `surfaceBox`, `textField`, `hoverArea` |
+| `internal/ui/text.go`, `texts.go`      | Text styles + `pageHeader`; date/duration/count wording (tested) |
+| `internal/ui/icons.go`                 | `strokeIcon`: line icons from a tiny SVG-path subset        |
+| `internal/ui/dialog.go`                | Modal `dialog`, `card`, `outlinedSurface`, `floatingSurface` |
+| `internal/ui/toast.go`                 | `toast`: timed confirmation with an optional link           |
+| `internal/ui/wrap.go`                  | `layoutWrappedCentered`: wrapping row layout                |
 | `internal/ui/load.go`                  | `backgroundLoad`: one disk read at a time off the UI goroutine |
-| `internal/ui/settings_page.go`         | Settings page                                               |
-| `internal/ui/capture_ui.go`            | `ui.Services`, status text, data folder form, first-run prompts, text field |
-| `internal/ui/button.go`, `dialog.go`   | Primary/secondary/toggle buttons; modal dialog, `card`, `panel`, `outlinedSurface` |
-| `cmd/worldkit/rsrc_windows_amd64.syso` | Generated exe icon + manifest; linked automatically by `go build` |
-| `internal/ui/app.go`                   | Event loop, `Shell` (page switching, reload on show), `pageTitle`/`caption` helpers |
-| `internal/ui/sidebar.go`               | `Sidebar`, `NavItem`, `navRow`, divider/border helpers      |
 | `internal/ui/animation.go`             | `expandAnimation` (reversible 0↔1 progress) + easing        |
 | `internal/ui/logo.go`                  | `Logo` widget (sharp at any DPI)                            |
-| `internal/ui/theme.go`                 | All design tokens and `NewTheme()`                          |
-| `assets/assets.go`, `assets/logo.png`  | Embedded logo (384×384, transparent); the only logo source  |
+| `internal/ui/theme.go`, `fonts.go`     | All design tokens and `NewTheme()`; embedded-font shaper    |
+| `assets/assets.go`, `assets/logo.png`, `assets/fonts/` | Embedded logo (384×384, the only logo source) and Geist/Geist Mono TTFs + `OFL.txt` |
+| `cmd/worldkit/rsrc_windows_amd64.syso` | Generated exe icon + manifest; linked automatically by `go build` |
 | `CLAUDE.md`                            | Code rules, commands, commit checklist                      |
-| `DESIGN.md`                            | Palette, typography, spacing, sidebar/logo/button specs     |
+| `DESIGN.md`                            | Tokens, typography, components and every screen's layout    |
 | `.graphifyignore`, `graphify-out/`     | Knowledge-graph config and output (see below)               |
 
 ## Key decisions (and why)
@@ -177,18 +184,39 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   (github.com/flipperatol121/chatlog-magician, the FiveM-era fork), which recreates the in-game
   chat. One color per line: `[INFO]` lines are white, although the game draws the `[INFO]` tag
   blue; "near you" vs "far" brightness for says is not modeled.
-- **Log filters live behind a Filters button** to keep the viewer header calm. Options in a group
-  combine with OR, the Actions and Characters groups with AND; an empty group keeps everything.
-  **IC** = everything in character: says, shouts, whispers, `/me` and `/do` (all but `/b`, PMs
-  and server lines). `/me` and `/do` also have their own options to show only emotes.
+- **Filters are always visible** above the log (redesign): a find field, one line kind at a
+  time (**All · IC · /me · /do · /b · PMs**; **IC** = says, shouts, whispers, `/me` and `/do`),
+  and characters from a menu, shown as removable chips. Characters combine with OR; kind,
+  characters and find text with AND. A single kind is simpler to read than the old
+  multi-toggle panel, and the filters' state is visible without opening anything.
 - **Characters are detected, not typed:** every speaker in the session (`chatlog.Characters`),
   most active first. Picking one keeps lines they speak *or are mentioned in* (case-insensitive,
   `_` = space), so `* John Doe looks at Jane Roe.` shows under Jane Roe too. Only speakers are
   detected; a character who is only mentioned isn't listed.
 - **Hiding timestamps is display-only.** `Record.RawWithoutTimestamp` drops the leading
   `[HH:MM:SS] ` when lines are shown and copied; the stored files are never changed.
-- **Collapsed sidebar width is derived**, not hard-coded: `2 × (8 + 12) + 18 = 58 dp`, so icons
+- **Collapsed sidebar width is derived**, not hard-coded: `2 × (12 + 12) + 18 = 66 dp`, so icons
   sit at the same x position in both states and never jump during the animation.
+- **The redesign comes from a Claude Design canvas** ("WorldKit Redesign": one artboard per
+  screen and a type/color/component sheet). DESIGN.md is the source of truth in the repo; the
+  canvas is the picture of it. Built for what a player does: check capture is running (sidebar
+  card), find a session (who was in it, when, how long), read and filter it, extract lines.
+- **Geist + Geist Mono, embedded** (OFL-1.1, `assets/fonts`, ~0.8 MB): Gio's default Go font
+  looked dated. The shaper loads only embedded fonts, so text is identical on every PC. Mono is
+  for times, counts and paths. Screenshot images keep Arial Bold to match the game.
+- **Own title bar** (`app.Decorated(false)` + `titleBar`): the white Windows caption clashed
+  with the dark UI. Gio marks the empty strip as the move area (`system.ActionInputOp`), so
+  Windows keeps snapping, edge resizing and double-click maximize; the buttons call
+  `window.Perform`.
+- **Line icons are drawn from path strings** (`strokeIcon`), not Material icons: they match
+  the design's stroke style and need no icon dependency.
+- **Folder picker via COM** (`internal/folderpicker`): the modern Explorer dialog
+  (`IFileOpenDialog`, folder mode) through `x/sys/windows` syscalls, run on its own locked OS
+  thread off the UI goroutine. No new dependency and no CGO; the older `SHBrowseForFolder`
+  tree dialog was the alternative.
+- **Session list parses every session** to show characters, duration and kinds
+  (`chatlog.Summarize`), off the UI goroutine. Fine for hundreds of sessions; cache summaries
+  if history grows much larger.
 
 ## Known gotchas
 
@@ -226,6 +254,17 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   (e.g. -1 after scrolling up at the top). Clamp before indexing per-line data:
   `chatLineList.firstShownLine`. Dragging a selection above the top of a log crashed the app
   this way (index -1).
+- **`moveArea` must stay clear of buttons** and sizes itself from `Constraints.Min`: inside a
+  `layout.Stack` `Max` is the whole window, which once stretched the sidebar header to full height.
+- **Gio blends in linear light**: a 12% tint looks much stronger than in a browser. Tint
+  opacities in `theme.go` are tuned down (0.06–0.07) to look like the design.
+- **A hover tracker must wrap what it tracks** (`hoverArea` registers itself as the parent):
+  an area registered on top of buttons takes their clicks, which once made screenshot cards
+  unclickable.
+- **Labels squeezed to ~0 width wrap one character per line** and grow very tall, pushing
+  siblings out (this shrank the screenshot preview). Give captions in tight rows `MaxLines = 1`.
+- **Popovers use `op.Defer`** (the Characters menu) so they draw above later siblings, with a
+  transparent window-sized layer under them that closes them on an outside click.
 - **Start with Windows registers the running exe.** Enabling it from `go run` registers a temp
   build; use the release build.
 
@@ -258,12 +297,12 @@ graphify explain "Sidebar"
 
 - Verify capture while FiveM is running (live copy of the KVS) with a real play session.
 - Log viewer: live-update the open session as new lines arrive (today it reads once on open),
-  free-text search, a PM action option, a search box for long character lists, colored tags
-  inside a line (e.g. blue `[INFO]`).
-- Screenshots: copy the image to the clipboard (Gio's clipboard is text-only, needs Win32),
-  more selection-menu actions (Copy), screenshot style options (font size, wrap width,
-  background), delete from the list without opening.
+  a search box for long character lists, colored tags inside a line (e.g. blue `[INFO]`).
+- Screenshots: **Copy image** to the clipboard (Gio's clipboard is text-only; needs Win32
+  `CF_PNG`/`CF_DIB`), link a screenshot back to its session, style options (font size, wrap
+  width).
+- Sidebar counts next to Logs / Log Screenshots (the design shows them).
+- Cache session summaries if the session list gets slow.
 - Tray icon so WorldKit can keep capturing with its window closed.
-- Folder picker dialog for the FiveM data folder (today the path is typed/pasted).
 - Bring back more nav destinations when they have real content.
 - Persist sidebar expanded/collapsed state and last page between launches.

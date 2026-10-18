@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image"
 	"image/color"
 	"strings"
 
@@ -13,53 +14,94 @@ import (
 	"world-kit/internal/screenshot"
 )
 
-// chatLine is one saved chat line shown in its in-game color.
+// chatLine is one saved chat line shown in its in-game color, with its timestamp in a
+// column of its own when timestamps are on.
 type chatLine struct {
-	text  string
-	color color.NRGBA
+	time     string // "09:57:03", or "" when hidden or the line has none
+	text     string // the line without its timestamp
+	copyText string // what Copy and Extract use: the stored line, minus the timestamp when hidden
+	color    color.NRGBA
 }
 
-// newChatLines prepares records for display, each line exactly as stored, minus its
-// timestamp unless showsTimestamps.
+// newChatLines prepares records for display, each line exactly as stored, its timestamp
+// split off into the time column (or dropped when !showsTimestamps).
 func newChatLines(records []chatlog.Record, showsTimestamps bool) []chatLine {
 	lines := make([]chatLine, len(records))
 	for i, record := range records {
-		text := record.Raw
-		if !showsTimestamps {
-			text = record.RawWithoutTimestamp()
+		text := record.RawWithoutTimestamp()
+		line := chatLine{text: text, copyText: text, color: chatLineColor(record)}
+		if showsTimestamps {
+			line.copyText = record.Raw
+			if text != record.Raw {
+				line.time = record.Time.Format("15:04:05")
+			}
 		}
-		lines[i] = chatLine{text: text, color: chatLineColor(record)}
+		lines[i] = line
 	}
 	return lines
 }
 
-// Layout draws the line across the full width, tinted with the accent when isSelected.
-func (l chatLine) Layout(gtx layout.Context, theme *material.Theme, isSelected bool) layout.Dimensions {
+// Layout draws the line across the full width. Selected lines get an accent tint and a bar
+// at their left edge; showsTimeColumn reserves the timestamp column even when this line has none.
+func (l chatLine) Layout(gtx layout.Context, theme *material.Theme, isSelected, showsTimeColumn bool) layout.Dimensions {
 	gtx.Constraints.Min.X = gtx.Constraints.Max.X
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			size := gtx.Constraints.Min
 			if isSelected {
-				fill := withOpacity(colorPrimary, lineSelectionOpacity)
-				paint.FillShape(gtx.Ops, fill, clip.Rect{Max: gtx.Constraints.Min}.Op())
+				paint.FillShape(gtx.Ops, withOpacity(colorPrimary, lineSelectionOpacity), clip.Rect{Max: size}.Op())
+				bar := image.Rect(0, 0, gtx.Dp(activeIndicatorWidth), size.Y)
+				paint.FillShape(gtx.Ops, colorPrimary, clip.Rect(bar).Op())
 			}
-			return layout.Dimensions{Size: gtx.Constraints.Min}
+			return layout.Dimensions{Size: size}
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min.X = gtx.Constraints.Max.X
-			label := material.Label(theme, textSizeChatLine, l.text)
+			inset := layout.Inset{Left: spacingLarge + spacingTiny, Right: spacingLarge + spacingTiny, Top: chatLinePaddingY, Bottom: chatLinePaddingY}
+			return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return l.layoutColumns(gtx, theme, showsTimeColumn)
+			})
+		}),
+	)
+}
+
+func (l chatLine) layoutColumns(gtx layout.Context, theme *material.Theme, showsTimeColumn bool) layout.Dimensions {
+	row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Baseline}
+	return row.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if !showsTimeColumn {
+				return layout.Dimensions{}
+			}
+			gtx.Constraints.Min.X = gtx.Dp(chatTimestampWidth)
+			label := monoText(theme, textSizeCaption, l.time)
+			label.Color = colorTimestamp
+			return label.Layout(gtx)
+		}),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			label := material.Label(theme, textSizeBody, l.text)
 			label.Color = l.color
+			label.LineHeight = chatLineHeight
 			return label.Layout(gtx)
 		}),
 	)
 }
 
-// joinChatLines returns the lines' text, one per line.
+// joinChatLines returns the lines' copy text, one per line.
 func joinChatLines(lines []chatLine) string {
 	texts := make([]string, len(lines))
 	for i, line := range lines {
-		texts[i] = line.text
+		texts[i] = line.copyText
 	}
 	return strings.Join(texts, "\n")
+}
+
+// screenshotLines turns lines into what the screenshot renderer draws, keeping each color.
+func screenshotLines(lines []chatLine) []screenshot.Line {
+	shotLines := make([]screenshot.Line, len(lines))
+	for i, line := range lines {
+		shotLines[i] = screenshot.Line{Text: line.copyText, Color: line.color}
+	}
+	return shotLines
 }
 
 // chatLineColor returns the color GTA World's chat draws a line of this kind in.
@@ -83,13 +125,4 @@ func chatLineColor(record chatlog.Record) color.NRGBA {
 	default:
 		return colorChatSay
 	}
-}
-
-// screenshotLines turns lines into what the screenshot renderer draws, keeping each color.
-func screenshotLines(lines []chatLine) []screenshot.Line {
-	shotLines := make([]screenshot.Line, len(lines))
-	for i, line := range lines {
-		shotLines[i] = screenshot.Line{Text: line.text, Color: line.color}
-	}
-	return shotLines
 }

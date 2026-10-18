@@ -14,6 +14,7 @@ import (
 	"world-kit/internal/capture"
 	"world-kit/internal/chatlog"
 	"world-kit/internal/fivem"
+	"world-kit/internal/folderpicker"
 	"world-kit/internal/screenshot"
 	"world-kit/internal/settings"
 )
@@ -25,6 +26,15 @@ type Services struct {
 	Logs        LogLibrary
 	Screenshots ScreenshotStore
 	Startup     StartupEntry // nil when the startup entry is unavailable
+	Folders     FolderPicker
+
+	window uintptr // the window's handle, so dialogs can be modal to it; set by Run
+}
+
+// FolderPicker shows the system's folder dialog over owner and blocks until the user picks
+// a folder (or cancels: folderpicker.ErrCanceled).
+type FolderPicker interface {
+	Pick(owner uintptr, title, startDir string) (string, error)
 }
 
 // LogLibrary lists the saved chat sessions and reads their lines.
@@ -39,6 +49,7 @@ type ScreenshotStore interface {
 	List() ([]screenshot.Shot, error)
 	Load(path string) (image.Image, error)
 	Delete(path string) error
+	Dir() string // the folder screenshots are saved in
 }
 
 // CaptureService reports chat capture progress and accepts a user-picked FiveM data folder.
@@ -81,20 +92,32 @@ func captureStatusText(status capture.Status) string {
 	}
 }
 
-// dataDirForm lets the user type FiveM's data folder and save it.
+// dataDirForm picks FiveM's data folder with Browse… (or a typed path and Enter) and saves it.
 type dataDirForm struct {
 	editor       widget.Editor
-	save         widget.Clickable
+	browse       widget.Clickable
+	browseKind   buttonKind
+	picker       *backgroundLoad[string]
 	errorText    string
 	hasPrefilled bool
 }
 
-func newDataDirForm() *dataDirForm {
-	return &dataDirForm{editor: widget.Editor{SingleLine: true, Submit: true}}
+// newDataDirForm creates the form; browseKind styles Browse… (primary where picking the
+// folder is the screen's main action).
+func newDataDirForm(invalidate func(), browseKind buttonKind) *dataDirForm {
+	return &dataDirForm{
+		editor:     widget.Editor{SingleLine: true, Submit: true},
+		browseKind: browseKind,
+		picker:     newBackgroundLoad[string](invalidate),
+	}
 }
 
 func (f *dataDirForm) Layout(gtx layout.Context, theme *material.Theme, services Services) layout.Dimensions {
 	f.prefill(services.Capture.Status().DataDir)
+	f.receivePickedFolder(services)
+	if f.browse.Clicked(gtx) && !f.picker.IsLoading() {
+		f.startPicker(services)
+	}
 	if f.wasSubmitted(gtx) {
 		f.errorText = saveDataDir(services, f.editor.Text())
 	}
@@ -103,11 +126,11 @@ func (f *dataDirForm) Layout(gtx layout.Context, theme *material.Theme, services
 			row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}
 			return row.Layout(gtx,
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					return textField(gtx, theme, &f.editor, `C:\Users\you\AppData\Roaming\CitizenFX`)
+					return textField{editor: &f.editor, hint: `C:\Users\you\AppData\Roaming\CitizenFX`, isMono: true}.Layout(gtx, theme)
 				}),
 				layout.Rigid(layout.Spacer{Width: spacingSmall}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return primaryButton(&f.save, "Save").Layout(gtx, theme)
+					return secondaryButton(&f.browse, "Browse…").withKind(f.browseKind).Layout(gtx, theme)
 				}),
 			)
 		}),
@@ -126,8 +149,31 @@ func (f *dataDirForm) prefill(dataDir string) {
 	f.hasPrefilled = true
 }
 
+// startPicker opens the folder dialog in the background, starting at the typed folder.
+func (f *dataDirForm) startPicker(services Services) {
+	owner, startDir := services.window, f.editor.Text()
+	f.picker.Start(func() (string, error) {
+		return services.Folders.Pick(owner, "Select FiveM's data folder (CitizenFX)", startDir)
+	})
+}
+
+func (f *dataDirForm) receivePickedFolder(services Services) {
+	result, ok := f.picker.Result()
+	if !ok || errors.Is(result.err, folderpicker.ErrCanceled) {
+		return
+	}
+	if result.err != nil {
+		slog.Error("pick FiveM data folder", "error", result.err)
+		f.errorText = "Couldn't open the folder picker. Type the path and press Enter instead."
+		return
+	}
+	f.editor.SetText(result.value)
+	f.errorText = saveDataDir(services, result.value)
+}
+
+// wasSubmitted reports whether Enter was pressed in the path field.
 func (f *dataDirForm) wasSubmitted(gtx layout.Context) bool {
-	isSubmitted := f.save.Clicked(gtx)
+	isSubmitted := false
 	for {
 		event, ok := f.editor.Update(gtx)
 		if !ok {
@@ -166,7 +212,7 @@ type dataDirPrompt struct {
 func (p *dataDirPrompt) Layout(gtx layout.Context, theme *material.Theme, services Services) layout.Dimensions {
 	return p.dialog.Layout(gtx, theme, "Where is FiveM's data?",
 		"WorldKit saves your GTA World chat from FiveM's data folder (CitizenFX), but couldn't "+
-			"find it in the usual place. Paste the folder's path below.",
+			"find it in the usual place. Pick the folder with Browse…, or paste its path and press Enter.",
 		func(gtx layout.Context) layout.Dimensions { return p.form.Layout(gtx, theme, services) })
 }
 
@@ -221,37 +267,6 @@ func (p *startupPrompt) Layout(gtx layout.Context, theme *material.Theme) layout
 				}),
 			)
 		})
-}
-
-// textField draws a single editor on an input surface.
-func textField(gtx layout.Context, theme *material.Theme, editor *widget.Editor, hint string) layout.Dimensions {
-	return layout.Stack{}.Layout(gtx,
-		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			return outlinedSurface(gtx, colorElevatedSurface)
-		}),
-		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			gtx.Constraints.Min.X = gtx.Constraints.Max.X
-			inset := layout.Inset{Left: spacingSmall, Right: spacingSmall, Top: inputPaddingY, Bottom: inputPaddingY}
-			return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				field := material.Editor(theme, editor, hint)
-				field.HintColor = colorTextSecondary
-				field.SelectionColor = withOpacity(colorPrimary, selectionOpacity)
-				return field.Layout(gtx)
-			})
-		}),
-	)
-}
-
-// errorCaption shows a problem under a control, or nothing when text is empty.
-func errorCaption(gtx layout.Context, theme *material.Theme, text string) layout.Dimensions {
-	if text == "" {
-		return layout.Dimensions{}
-	}
-	return layout.Inset{Top: spacingSmall}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		label := caption(theme, text)
-		label.Color = colorError
-		return label.Layout(gtx)
-	})
 }
 
 // openFolder shows dir in File Explorer.
