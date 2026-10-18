@@ -72,3 +72,24 @@ func TestParseTimesRollOverMidnight(t *testing.T) {
 		}
 	}
 }
+
+func TestRawWithoutTimestamp(t *testing.T) {
+	tests := []struct{ line, want string }{
+		{"[09:57:12] * Jane Roe waves.", "* Jane Roe waves."},
+		{"[09:57:15] (( Jane Roe: brb ))", "(( Jane Roe: brb ))"},
+		{"John Doe says: untimed", "John Doe says: untimed"},
+		{"[DATE: 18/OCT/2026 | TIME: 09:57:01]", "[DATE: 18/OCT/2026 | TIME: 09:57:01]"},
+		{"[INFO] [09:57:12] not a leading timestamp", "[INFO] [09:57:12] not a leading timestamp"},
+	}
+	for _, test := range tests {
+		t.Run(test.line, func(t *testing.T) {
+			records, err := Parse(strings.NewReader(test.line))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := records[0].RawWithoutTimestamp(); got != test.want {
+				t.Errorf("got %q, want %q", got, test.want)
+			}
+		})
+	}
+}

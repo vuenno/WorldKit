@@ -24,7 +24,7 @@ browsing them in a **log viewer** with name and kind filters.
 | Sidebar          | Done: collapsible (200 ↔ 58 dp), 200 ms ease-in-out animation, hover/active states |
 | Navigation       | Done: Logs, Settings (Home/Explore/Map/Library were removed for now)   |
 | Logs page        | Done: saved sessions newest first (start time, last updated, session #) + capture status; reloads when shown and after new lines are saved |
-| Log viewer       | Done: lines in GTA:W's in-game chat colors (12 sp, scrollbar), filter by name and by /me, /do, /b (OOC); drag/Shift+click/Ctrl+A to select lines; Copy or Ctrl+C copies the selection (or all visible lines) |
+| Log viewer       | Done: lines in GTA:W's in-game chat colors (12 sp, scrollbar), Filters panel: actions (/me, /do, /b, IC), auto-detected characters, show/hide timestamps; drag/Shift+click/Ctrl+A to select lines; Copy or Ctrl+C copies the selection (or all visible lines) |
 | Settings page    | Done: capture status, open logs folder, FiveM data folder, start with Windows |
 | Branding         | Done: logo in sidebar header, exe/title bar/taskbar icon               |
 | Chat capture     | Done: background polling of FiveM's KVS, one `.txt` per session, crash-safe appends |
@@ -89,19 +89,21 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `cmd/worldkit/main.go`                 | Parses `-minimized`, starts `run` and the Gio main loop     |
 | `cmd/worldkit/run.go`                  | Builds settings, capture service, startup entry, window (960×600, min 640×400) |
 | `internal/fivem/`                      | Finds FiveM's KVS, copies it, reads the GTA World chat log; MessagePack string decoder |
-| `internal/chatlog/`                    | `Archive` (session files, lock, crash repair), `Parse` (line kinds, midnight rollover), `Library` (list/read sessions), `Filter` (name + kinds) |
+| `internal/chatlog/`                    | `Archive` (session files, lock, crash repair), `Parse` (line kinds, midnight rollover), `Library` (list/read sessions), `Filter` (names + kinds), `Characters` (speakers by line count) |
 | `internal/capture/`                    | Background `Service`: polling loop, data folder changes, `Status` |
 | `internal/settings/`                   | `settings.json` load + atomic save                          |
 | `internal/autostart/`                  | Start with Windows via the HKCU `Run` registry key          |
 | `internal/ui/logs_page.go`             | Logs page: session list, `sessionRow`, session title/date texts |
-| `internal/ui/log_viewer.go`            | `logViewer`: name field, kind toggles, Copy, line list      |
+| `internal/ui/log_viewer.go`            | `logViewer`: header (Back, Filters, Copy), filter panel, line list |
+| `internal/ui/log_filters.go`           | `logFilters`: action + character options → `chatlog.Filter` |
+| `internal/ui/wrap.go`                  | `layoutWrapped`: left-to-right layout that wraps to new rows |
 | `internal/ui/chat_line.go`             | `chatLine` (one colored line), `chatLineColor` (kind → in-game color) |
 | `internal/ui/chat_line_list.go`        | `chatLineList`: scrolling lines, mouse/keyboard line selection, copy text |
 | `internal/ui/line_selection.go`        | `lineSelection`: anchor/end range of whole lines (pure logic, tested) |
 | `internal/ui/load.go`                  | `backgroundLoad`: one disk read at a time off the UI goroutine |
 | `internal/ui/settings_page.go`         | Settings page                                               |
 | `internal/ui/capture_ui.go`            | `ui.Services`, status text, data folder form, first-run prompts, text field |
-| `internal/ui/button.go`, `dialog.go`   | Primary/secondary/toggle buttons; modal dialog, `card`, `outlinedSurface` |
+| `internal/ui/button.go`, `dialog.go`   | Primary/secondary/toggle buttons; modal dialog, `card`, `panel`, `outlinedSurface` |
 | `cmd/worldkit/rsrc_windows_amd64.syso` | Generated exe icon + manifest; linked automatically by `go build` |
 | `internal/ui/app.go`                   | Event loop, `Shell` (page switching, reload on show), `pageTitle`/`caption` helpers |
 | `internal/ui/sidebar.go`               | `Sidebar`, `NavItem`, `navRow`, divider/border helpers      |
@@ -148,8 +150,16 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   (github.com/flipperatol121/chatlog-magician, the FiveM-era fork), which recreates the in-game
   chat. One color per line: `[INFO]` lines are white, although the game draws the `[INFO]` tag
   blue; "near you" vs "far" brightness for says is not modeled.
-- **Name filter matches speaker or mention**, case-insensitive, `_` = space, so "Jane" also finds
-  `* John Doe looks at Jane Roe.`; selecting no kind toggle shows all kinds.
+- **Log filters live behind a Filters button** to keep the viewer header calm. Options in a group
+  combine with OR, the Actions and Characters groups with AND; an empty group keeps everything.
+  **IC** = everything in character: says, shouts, whispers, `/me` and `/do` (all but `/b`, PMs
+  and server lines). `/me` and `/do` also have their own options to show only emotes.
+- **Characters are detected, not typed:** every speaker in the session (`chatlog.Characters`),
+  most active first. Picking one keeps lines they speak *or are mentioned in* (case-insensitive,
+  `_` = space), so `* John Doe looks at Jane Roe.` shows under Jane Roe too. Only speakers are
+  detected; a character who is only mentioned isn't listed.
+- **Hiding timestamps is display-only.** `Record.RawWithoutTimestamp` drops the leading
+  `[HH:MM:SS] ` when lines are shown and copied; the stored files are never changed.
 - **Collapsed sidebar width is derived**, not hard-coded: `2 × (8 + 12) + 18 = 58 dp`, so icons
   sit at the same x position in both states and never jump during the animation.
 
@@ -208,7 +218,8 @@ graphify explain "Sidebar"
 
 - Verify capture while FiveM is running (live copy of the KVS) with a real play session.
 - Log viewer: live-update the open session as new lines arrive (today it reads once on open),
-  free-text search, more kind toggles (says, PMs), colored tags inside a line (e.g. blue `[INFO]`).
+  free-text search, a PM action option, a search box for long character lists, colored tags
+  inside a line (e.g. blue `[INFO]`).
 - Tray icon so WorldKit can keep capturing with its window closed.
 - Folder picker dialog for the FiveM data folder (today the path is typed/pasted).
 - Bring back more nav destinations when they have real content.

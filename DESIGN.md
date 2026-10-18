@@ -92,6 +92,7 @@ Spacing follows a 4 dp grid.
 | `inputPaddingY`  | 8 dp   | Vertical padding inside text fields   |
 | `dialogWidth`    | 420 dp | Max dialog width                      |
 | `contentMaxWidth`| 640 dp | Max width of page content (Settings, Logs list) |
+| `characterOptionsMaxHeight` | 132 dp | Max height of the log filter's character options |
 
 ## Sidebar (navbar)
 
@@ -146,14 +147,17 @@ separated from content by a 1 dp `colorBorder` line on its right edge.
 - Labels are 13 sp Medium, one line. Code: `primaryButton` / `secondaryButton` in `internal/ui/button.go`.
 - Place a primary button first (left), then secondary, `spacingSmall` apart.
 - **Toggle** (on/off filter, `toggleButton`): looks primary while on (orange marks what is
-  active) and secondary while off. Toggles in a row sit `spacingSmall` apart.
+  active) and secondary while off. Toggles sit `spacingSmall` apart and wrap onto new rows
+  (also `spacingSmall` apart) when they don't fit (`layoutWrapped` in `internal/ui/wrap.go`).
 
 ## Cards
 
 - `colorSurface` fill, 1 dp `colorBorder`, `cornerRadius` corners, `spacingLarge` padding, full width.
 - Section title inside a card: 13 sp SemiBold; description under it as a caption.
 - Cards on a page are `spacingMedium` apart. Code: `card` in `internal/ui/dialog.go`.
-- Cards, text fields and list rows share one background: `outlinedSurface` (fill + 1 dp
+- **Panel:** a compact card with `spacingMedium` padding, for tool panels inside a page (e.g. the
+  log filters). Code: `panel` in `internal/ui/dialog.go`.
+- Cards, panels, text fields and list rows share one background: `outlinedSurface` (fill + 1 dp
   `colorBorder`, `cornerRadius`).
 
 ## List rows
@@ -168,11 +172,21 @@ separated from content by a 1 dp `colorBorder` line on its right edge.
 ## Log viewer
 
 - Fills the page (no max width), `spacingLarge` padding.
-- Header row: secondary **Back**, then the page title with a caption under it, then primary
-  **Copy** on the right; `spacingMedium` gaps.
-- Filter row (`spacingMedium` below): name text field filling the width, then kind toggles
-  (`/me`, `/do`, `/b (OOC)`).
-- A caption with the line count ("Showing 3 of 8 lines."), `spacingSmall` above and below.
+- Header row: secondary **Back**, then the page title with a caption under it, then on the
+  right a **Filters** toggle and primary **Copy** (`spacingSmall` apart); `spacingMedium` gaps.
+  Filters reads "Filters (N)" and turns orange while N options are on; clicking it opens or
+  closes the filter panel.
+- Filter panel (`spacingMedium` below the header, only while open): a `panel` with
+  - **Actions**: section title, a secondary **Clear** on the right while any option is on (its
+    height is always reserved so nothing jumps), then toggles `/me`, `/do`, `/b (OOC)`, `IC`.
+  - **Characters** (`spacingMedium` below): section title + "N detected" caption, then one
+    toggle per character, "Name · line count", most active first. At most
+    `characterOptionsMaxHeight` (132 dp, about 3½ rows) tall; scrolls beyond that.
+  - **Display** (`spacingMedium` below): a **Timestamps** toggle, on by default. Off strips the
+    leading `[HH:MM:SS]` from shown and copied lines. Display options don't count toward
+    "Filters (N)" and Clear leaves them alone.
+- A caption with the line count ("Showing 3 of 8 lines."), `spacingMedium` above and
+  `spacingSmall` below.
 - The text panel fills the remaining height: `outlinedSurface` in `colorSurface`,
   `spacingMedium` padding, a scrollable list of lines (scrollbar `colorBorder`, hover
   `colorTextSecondary`). Each line is 12 sp (`textSizeChatLine`) in its chat color (below),

@@ -7,6 +7,7 @@ import (
 	"gioui.org/layout"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
+	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 )
@@ -39,6 +40,15 @@ func (d *dialog) Layout(gtx layout.Context, theme *material.Theme, title, messag
 
 // card draws content on a bordered surface panel with page-sized padding, filling the width.
 func card(gtx layout.Context, content layout.Widget) layout.Dimensions {
+	return paddedSurface(gtx, spacingLarge, content)
+}
+
+// panel is a compact card (spacingMedium padding) for tool panels inside a page.
+func panel(gtx layout.Context, content layout.Widget) layout.Dimensions {
+	return paddedSurface(gtx, spacingMedium, content)
+}
+
+func paddedSurface(gtx layout.Context, padding unit.Dp, content layout.Widget) layout.Dimensions {
 	gtx.Constraints.Min.X = gtx.Constraints.Max.X
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
@@ -47,7 +57,7 @@ func card(gtx layout.Context, content layout.Widget) layout.Dimensions {
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			// Stack clears Min for stacked children; restore the full width.
 			gtx.Constraints.Min.X = gtx.Constraints.Max.X
-			return layout.UniformInset(spacingLarge).Layout(gtx, content)
+			return layout.UniformInset(padding).Layout(gtx, content)
 		}),
 	)
 }

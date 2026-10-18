@@ -72,6 +72,10 @@ const (
 	inputPaddingY   = spacingSmall
 	dialogWidth     = unit.Dp(420)
 	contentMaxWidth = unit.Dp(640)
+
+	// characterOptionsMaxHeight shows about three and a half rows of character options, so a
+	// cut-off row hints that the list scrolls.
+	characterOptionsMaxHeight = unit.Dp(132)
 )
 
 // Sidebar dimensions and motion.

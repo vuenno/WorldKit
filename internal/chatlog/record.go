@@ -81,6 +81,15 @@ func Parse(r io.Reader) ([]Record, error) {
 	return records, nil
 }
 
+// RawWithoutTimestamp returns the line as stored minus its leading "[HH:MM:SS] " timestamp.
+// Lines without one are returned unchanged.
+func (r Record) RawWithoutTimestamp() string {
+	if match := timestampPattern.FindStringIndex(r.Raw); match != nil {
+		return r.Raw[match[1]:]
+	}
+	return r.Raw
+}
+
 func parseLine(raw string, clock *sessionClock) Record {
 	record := Record{Raw: raw, Text: raw, Time: clock.current}
 	body := raw
