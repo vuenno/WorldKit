@@ -1,24 +1,20 @@
 package main
 
 import (
+	"flag"
 	"log/slog"
 	"os"
 
 	"gioui.org/app"
-	"gioui.org/unit"
 
-	"world-kit/internal/ui"
+	"world-kit/internal/autostart"
 )
 
 func main() {
+	isMinimized := flag.Bool(autostart.MinimizedFlag, false, "start minimized (used when starting with Windows)")
+	flag.Parse()
 	go func() {
-		window := new(app.Window)
-		window.Option(
-			app.Title("WorldKit"),
-			app.Size(unit.Dp(960), unit.Dp(600)),
-			app.MinSize(unit.Dp(640), unit.Dp(400)),
-		)
-		if err := ui.Run(window); err != nil {
+		if err := run(*isMinimized); err != nil {
 			slog.Error("application stopped", "error", err)
 			os.Exit(1)
 		}

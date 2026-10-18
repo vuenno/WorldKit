@@ -18,7 +18,12 @@ var (
 	colorTextPrimary     = rgb(0xF5F5F5)
 	colorTextSecondary   = rgb(0xA1A1AA)
 	colorBorder          = rgb(0x3F3F46)
+	colorError           = rgb(0xF87171)
+	colorScrim           = withOpacity(colorAppBackground, 0.8)
 )
+
+// selectionOpacity tints selected text with the accent without hiding it.
+const selectionOpacity = 0.4
 
 const appName = "WorldKit"
 
@@ -45,6 +50,12 @@ const (
 
 	logoSizeSidebar = unit.Dp(28)
 	logoSizeHero    = unit.Dp(160)
+
+	buttonHeight    = unit.Dp(32)
+	buttonPaddingX  = spacingMedium
+	inputPaddingY   = spacingSmall
+	dialogWidth     = unit.Dp(420)
+	contentMaxWidth = unit.Dp(640)
 )
 
 // Sidebar dimensions and motion.

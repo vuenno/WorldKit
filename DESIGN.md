@@ -37,6 +37,10 @@ mark. Use it everywhere the app identifies itself; never redraw, recolor or crop
 | Primary text       | `#F5F5F5` | `colorTextPrimary`      | Headings, active labels, body text        |
 | Secondary text     | `#A1A1AA` | `colorTextSecondary`    | Inactive labels, hints, icons at rest     |
 | Borders            | `#3F3F46` | `colorBorder`           | Dividers, outlines (1 dp)                 |
+| Error text         | `#F87171` | `colorError`            | Error captions under a control only       |
+| Scrim              | app background @ 80% | `colorScrim` | Dims the window behind a dialog         |
+
+Selected text in inputs is `colorPrimary` at 40% opacity (`selectionOpacity`).
 
 Rules:
 - Text on orange uses `colorTextPrimary`.
@@ -66,7 +70,11 @@ Spacing follows a 4 dp grid.
 | `spacingLarge`   | 24 dp  | Page padding                          |
 | `iconSize`       | 18 dp  | All icons                             |
 | `navItemHeight`  | 36 dp  | Nav items and the toggle button       |
-| `cornerRadius`   | 6 dp   | Nav items, buttons                    |
+| `cornerRadius`   | 6 dp   | Nav items, buttons, cards, inputs     |
+| `buttonHeight`   | 32 dp  | Buttons                               |
+| `inputPaddingY`  | 8 dp   | Vertical padding inside text fields   |
+| `dialogWidth`    | 420 dp | Max dialog width                      |
+| `contentMaxWidth`| 640 dp | Max width of page content (Settings)  |
 
 ## Sidebar (navbar)
 
@@ -118,3 +126,29 @@ separated from content by a 1 dp `colorBorder` line on its right edge.
 - Height 32 dp, `cornerRadius` corners, label 13 sp, horizontal padding 12 dp.
 - **Primary:** `colorPrimary` fill → `colorPrimaryHover` on hover, `colorTextPrimary` text.
 - **Secondary:** `colorElevatedSurface` fill, 1 dp `colorBorder`, `colorTextPrimary` text.
+- Labels are 13 sp Medium, one line. Code: `primaryButton` / `secondaryButton` in `internal/ui/button.go`.
+- Place a primary button first (left), then secondary, `spacingSmall` apart.
+
+## Cards
+
+- `colorSurface` fill, 1 dp `colorBorder`, `cornerRadius` corners, `spacingLarge` padding, full width.
+- Section title inside a card: 13 sp SemiBold; description under it as a caption.
+- Cards on a page are `spacingMedium` apart. Code: `card` in `internal/ui/dialog.go`.
+
+## Text fields
+
+- `colorElevatedSurface` fill, 1 dp `colorBorder`, `cornerRadius` corners,
+  `spacingSmall` horizontal / `inputPaddingY` vertical padding, 13 sp text, hint in `colorTextSecondary`.
+- An action button for the field sits to its right, `spacingSmall` apart.
+- Errors appear below as a caption in `colorError`, `spacingSmall` above it.
+
+## Switches
+
+- Material switch: thumb `colorPrimary` when on, `colorTextSecondary` when off, track `colorBorder`.
+- Right-aligned in its row, with the section title on the left.
+
+## Dialogs
+
+- Modal: `colorScrim` covers the whole window and swallows clicks.
+- A card, centered, at most `dialogWidth` wide: page title (16 sp SemiBold), `spacingSmall`,
+  body text, `spacingLarge`, then the controls. Only one dialog shows at a time.

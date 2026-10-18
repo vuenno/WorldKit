@@ -1,0 +1,57 @@
+package ui
+
+import (
+	"image"
+
+	"gioui.org/layout"
+	"gioui.org/op/clip"
+	"gioui.org/op/paint"
+	"gioui.org/widget"
+	"gioui.org/widget/material"
+)
+
+// dialog is a modal card centered over a dimmed window. The scrim swallows clicks,
+// so nothing behind the dialog can be used until it closes.
+type dialog struct {
+	scrim widget.Clickable
+}
+
+func (d *dialog) Layout(gtx layout.Context, theme *material.Theme, title, message string, content layout.Widget) layout.Dimensions {
+	d.scrim.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		size := gtx.Constraints.Max
+		paint.FillShape(gtx.Ops, colorScrim, clip.Rect{Max: size}.Op())
+		return layout.Dimensions{Size: size}
+	})
+	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, gtx.Dp(dialogWidth))
+		return card(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(pageTitle(theme, title).Layout),
+				layout.Rigid(layout.Spacer{Height: spacingSmall}.Layout),
+				layout.Rigid(bodyText(theme, message).Layout),
+				layout.Rigid(layout.Spacer{Height: spacingLarge}.Layout),
+				layout.Rigid(content),
+			)
+		})
+	})
+}
+
+// card draws content on a bordered surface panel with page-sized padding, filling the width.
+func card(gtx layout.Context, content layout.Widget) layout.Dimensions {
+	gtx.Constraints.Min.X = gtx.Constraints.Max.X
+	return layout.Stack{}.Layout(gtx,
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			size := gtx.Constraints.Min
+			shape := clip.UniformRRect(image.Rectangle{Max: size}, gtx.Dp(cornerRadius))
+			paint.FillShape(gtx.Ops, colorSurface, shape.Op(gtx.Ops))
+			border := clip.Stroke{Path: shape.Path(gtx.Ops), Width: float32(gtx.Dp(borderWidth))}
+			paint.FillShape(gtx.Ops, colorBorder, border.Op())
+			return layout.Dimensions{Size: size}
+		}),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+			// Stack clears Min for stacked children; restore the full width.
+			gtx.Constraints.Min.X = gtx.Constraints.Max.X
+			return layout.UniformInset(spacingLarge).Layout(gtx, content)
+		}),
+	)
+}
