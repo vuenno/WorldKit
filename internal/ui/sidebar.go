@@ -32,15 +32,17 @@ type Sidebar struct {
 	Items         []*NavItem
 	SelectedIndex int
 
+	logo         *Logo
 	toggleButton widget.Clickable
 	toggleIcon   *widget.Icon
 	expansion    expandAnimation
 }
 
 // NewSidebar creates an expanded sidebar with the first item selected.
-func NewSidebar(items ...*NavItem) *Sidebar {
+func NewSidebar(logo *Logo, items ...*NavItem) *Sidebar {
 	return &Sidebar{
 		Items:      items,
+		logo:       logo,
 		toggleIcon: mustIcon(icons.NavigationMenu),
 		expansion:  newExpandAnimation(sidebarToggleDuration, true),
 	}
@@ -83,8 +85,7 @@ func (s *Sidebar) handleClicks(gtx layout.Context) {
 func (s *Sidebar) layoutContent(gtx layout.Context, theme *material.Theme, labelOpacity float32) layout.Dimensions {
 	children := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			toggle := navRow{click: &s.toggleButton, icon: s.toggleIcon}
-			return toggle.Layout(gtx, theme)
+			return s.layoutHeader(gtx, theme, labelOpacity)
 		}),
 		layout.Rigid(layout.Spacer{Height: spacingSmall}.Layout),
 		layout.Rigid(horizontalDivider),
@@ -103,6 +104,46 @@ func (s *Sidebar) layoutContent(gtx layout.Context, theme *material.Theme, label
 		)
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+}
+
+// layoutHeader draws the toggle button, then the brand (logo + name), which fades
+// out with the labels and is clipped away when the sidebar is collapsed.
+func (s *Sidebar) layoutHeader(gtx layout.Context, theme *material.Theme, brandOpacity float32) layout.Dimensions {
+	row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}
+	return row.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Max.X = gtx.Dp(sidebarCollapsedWidth - 2*sidebarPadding)
+			toggle := navRow{click: &s.toggleButton, icon: s.toggleIcon}
+			return toggle.Layout(gtx, theme)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if brandOpacity == 0 {
+				return layout.Dimensions{}
+			}
+			defer paint.PushOpacity(gtx.Ops, brandOpacity).Pop()
+			return s.layoutBrand(gtx, theme)
+		}),
+	)
+}
+
+func (s *Sidebar) layoutBrand(gtx layout.Context, theme *material.Theme) layout.Dimensions {
+	gtx.Constraints.Min = image.Point{}
+	gtx.Constraints.Max.X = gtx.Dp(sidebarExpandedWidth)
+	row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}
+	return row.Layout(gtx,
+		layout.Rigid(layout.Spacer{Width: spacingTiny}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return s.logo.Layout(gtx, logoSizeSidebar)
+		}),
+		layout.Rigid(layout.Spacer{Width: spacingSmall}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			name := material.Label(theme, textSizeBrand, appName)
+			name.Font.Weight = font.SemiBold
+			name.MaxLines = 1
+			name.Color = colorTextPrimary
+			return name.Layout(gtx)
+		}),
+	)
 }
 
 // navRow draws a clickable icon + label row used by both the toggle button and nav items.

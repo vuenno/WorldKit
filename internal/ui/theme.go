@@ -20,8 +20,11 @@ var (
 	colorBorder          = rgb(0x3F3F46)
 )
 
+const appName = "WorldKit"
+
 // Text sizes.
 const (
+	textSizeBrand     = unit.Sp(14)
 	textSizePageTitle = unit.Sp(16)
 	textSizeBody      = unit.Sp(13)
 	textSizeNavLabel  = unit.Sp(13)
@@ -39,6 +42,9 @@ const (
 	navItemHeight = unit.Dp(36)
 	cornerRadius  = unit.Dp(6)
 	borderWidth   = unit.Dp(1)
+
+	logoSizeSidebar = unit.Dp(28)
+	logoSizeHero    = unit.Dp(160)
 )
 
 // Sidebar dimensions and motion.

@@ -9,6 +9,8 @@ import (
 	"gioui.org/op/paint"
 	"gioui.org/widget/material"
 	"golang.org/x/exp/shiny/materialdesign/icons"
+
+	"world-kit/assets"
 )
 
 // Run drives the window's event loop until the window is closed.
@@ -31,14 +33,20 @@ func Run(window *app.Window) error {
 
 // Shell is the top-level layout: sidebar on the left, the selected page on the right.
 type Shell struct {
-	sidebar *Sidebar
+	logo     *Logo
+	homeItem *NavItem
+	sidebar  *Sidebar
 }
 
 // NewShell creates the shell with WorldKit's navigation destinations.
 func NewShell() *Shell {
+	logo := NewLogo(assets.Logo())
+	homeItem := NewNavItem("Home", icons.ActionHome)
 	return &Shell{
-		sidebar: NewSidebar(
-			NewNavItem("Home", icons.ActionHome),
+		logo:     logo,
+		homeItem: homeItem,
+		sidebar: NewSidebar(logo,
+			homeItem,
 			NewNavItem("Explore", icons.ActionExplore),
 			NewNavItem("Map", icons.MapsMap),
 			NewNavItem("Library", icons.AVLibraryBooks),
@@ -55,26 +63,52 @@ func (s *Shell) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensi
 			return s.sidebar.Layout(gtx, theme)
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return s.layoutPage(gtx, theme)
+			if s.sidebar.SelectedItem() == s.homeItem {
+				return s.layoutHomePage(gtx, theme)
+			}
+			return s.layoutPlaceholderPage(gtx, theme)
 		}),
 	)
 }
 
-func (s *Shell) layoutPage(gtx layout.Context, theme *material.Theme) layout.Dimensions {
-	pageName := s.sidebar.SelectedItem().Label
-	return layout.UniformInset(spacingLarge).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+// layoutHomePage shows the logo as a centered welcome hero.
+func (s *Shell) layoutHomePage(gtx layout.Context, theme *material.Theme) layout.Dimensions {
+	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				title := material.Label(theme, textSizePageTitle, pageName)
-				title.Font.Weight = font.SemiBold
-				return title.Layout(gtx)
+				return s.logo.Layout(gtx, logoSizeHero)
+			}),
+			layout.Rigid(layout.Spacer{Height: spacingMedium}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return pageTitle(theme, "Welcome to "+appName).Layout(gtx)
 			}),
 			layout.Rigid(layout.Spacer{Height: spacingTiny}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				caption := material.Label(theme, textSizeCaption, "This page is empty for now.")
-				caption.Color = colorTextSecondary
-				return caption.Layout(gtx)
+				return caption(theme, "Pick a section from the sidebar to get started.").Layout(gtx)
 			}),
 		)
 	})
+}
+
+func (s *Shell) layoutPlaceholderPage(gtx layout.Context, theme *material.Theme) layout.Dimensions {
+	pageName := s.sidebar.SelectedItem().Label
+	return layout.UniformInset(spacingLarge).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(pageTitle(theme, pageName).Layout),
+			layout.Rigid(layout.Spacer{Height: spacingTiny}.Layout),
+			layout.Rigid(caption(theme, "This page is empty for now.").Layout),
+		)
+	})
+}
+
+func pageTitle(theme *material.Theme, text string) material.LabelStyle {
+	title := material.Label(theme, textSizePageTitle, text)
+	title.Font.Weight = font.SemiBold
+	return title
+}
+
+func caption(theme *material.Theme, text string) material.LabelStyle {
+	label := material.Label(theme, textSizeCaption, text)
+	label.Color = colorTextSecondary
+	return label
 }

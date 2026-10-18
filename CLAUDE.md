@@ -1,7 +1,7 @@
 # WorldKit — Engineering Guide
 
-WorldKit is a small desktop application written in Go. This file defines how code in
-this repository is written. Follow it for every change.
+WorldKit is a small **Windows-only** desktop application written in Go. This file defines how
+code in this repository is written. Follow it for every change. Visual rules live in `DESIGN.md`.
 
 ## Goals (in priority order)
 
@@ -15,15 +15,21 @@ this repository is written. Follow it for every change.
 - **Go** 1.27+ (see `go.mod`).
 - **UI:** [Gio](https://gioui.org) (`gioui.org`) — immediate-mode, pure Go, no CGO needed on
   Windows, Material-style widgets via `gioui.org/widget/material`.
-- No other runtime dependencies without discussion.
+- `golang.org/x/image` for high-quality image resampling (Gio only scales linearly).
+- **Platform:** Windows only (amd64). Don't add code paths, build tags or resources for other OSes/arches.
+- No other runtime dependencies without discussion. Run one-off tools with `go run module@version`
+  instead of adding them to `go.mod`.
 
 ## Project layout
 
 ```
 cmd/worldkit/        main package: wiring only (create window, start app). No logic.
+                     rsrc_windows_amd64.syso = generated exe icon + manifest (linked
+                     automatically by `go build`); never edit by hand.
 internal/ui/         screens, widgets, theme. Knows about Gio; knows nothing about storage.
 internal/<domain>/   business logic (pure Go, no Gio imports, fully unit-testable).
-assets/              icons, fonts, embedded files (use //go:embed).
+assets/              embedded files (//go:embed). logo.png (384×384, transparent) is the
+                     single source of the logo, used everywhere.
 ```
 
 - `main.go` stays under ~40 lines.
@@ -107,6 +113,12 @@ go vet ./...                          # static checks
 gofmt -l .                            # must print nothing
 go test -race ./...                   # tests
 go mod tidy                           # keep go.mod clean
+```
+
+After changing `assets/logo.png`, regenerate the exe icon (run in `cmd/worldkit`):
+
+```bash
+go run github.com/tc-hib/go-winres@v0.3.3 simply --arch amd64 --icon ../../assets/logo.png --manifest gui --product-name WorldKit --file-description WorldKit --product-version 0.1.0 --file-version 0.1.0
 ```
 
 ## Before you commit
