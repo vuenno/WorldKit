@@ -32,14 +32,23 @@ code, whenever the change is worth noting:
 - **UI:** [Gio](https://gioui.org) (`gioui.org`) — immediate-mode, pure Go, no CGO needed on
   Windows, Material-style widgets via `gioui.org/widget/material`.
 - `golang.org/x/image` for high-quality image resampling (Gio only scales linearly).
+- `github.com/syndtr/goleveldb` (pulls in `github.com/golang/snappy`) to read FiveM's LevelDB
+  key-value store, where GTA World keeps its chat log. Pure Go, read-only use, on a copy only.
+- `golang.org/x/sys/windows` (already required by Gio) for the registry (start with Windows) and
+  exclusive file handles (single-instance archive lock).
 - **Platform:** Windows only (amd64). Don't add code paths, build tags or resources for other OSes/arches.
+- **Never open FiveM's live data.** Copy `%AppData%\CitizenFX\kvs` to a temp folder and read the copy.
+- **User data** lives in `os.UserConfigDir()\WorldKit` (`%AppData%\WorldKit`): `settings.json`
+  and `logs\`. Chat logs are stored raw (one `.txt` per session) and parsed on read; never
+  rewrite or reformat them in place.
 - No other runtime dependencies without discussion. Run one-off tools with `go run module@version`
   instead of adding them to `go.mod`.
 
 ## Project layout
 
 ```
-cmd/worldkit/        main package: wiring only (create window, start app). No logic.
+cmd/worldkit/        main package: wiring only (create window, services, start app). No logic.
+                     main.go parses flags; run.go builds the services and window.
                      rsrc_windows_amd64.syso = generated exe icon + manifest (linked
                      automatically by `go build`); never edit by hand.
 internal/ui/         screens, widgets, theme. Knows about Gio; knows nothing about storage.
@@ -100,7 +109,8 @@ assets/              embedded files (//go:embed). logo.png (384×384, transparen
 
 - Start a goroutine only when you know how it stops (pass `context.Context`).
 - Protect shared state with a mutex or channel — never both for the same data.
-- Run tests with `-race` before merging concurrency changes.
+- Run tests with `-race` before merging concurrency changes. `-race` needs CGO and a C compiler,
+  which the dev machine lacks; when it can't run, say so in the commit/PR.
 
 ## Reuse vs. duplication
 
@@ -123,7 +133,7 @@ assets/              embedded files (//go:embed). logo.png (384×384, transparen
 ## Commands
 
 ```bash
-go run ./cmd/worldkit                 # run the app
+go run ./cmd/worldkit                 # run the app (-minimized: start in the taskbar)
 go build -ldflags="-H windowsgui" -o bin/worldkit.exe ./cmd/worldkit   # release build (no console)
 go vet ./...                          # static checks
 gofmt -l .                            # must print nothing
