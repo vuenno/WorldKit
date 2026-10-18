@@ -27,7 +27,9 @@ screenshots, kept on the **Log Screenshots** page.
 | Sidebar          | Done: collapsible (232 ↔ 66 dp, 200 ms), brand, Logs / Log Screenshots, live capture status card, Settings at the bottom |
 | Logs page        | Done: "Live now" card for the session being captured; sessions grouped Today / Yesterday / Earlier this week / month, each with start time, duration, characters, line count and a kind bar; search by character or date |
 | Log viewer       | Done: always-visible toolbar (find text, kind segments All/IC/me/do/b/PMs, Characters menu, timestamps switch), filter chips + Clear filters, timestamp column, drag/Shift+click/Ctrl+A/Esc selection, floating selection bar (Copy, **Extract image**, ×), toasts ("Screenshot saved · View" opens it) |
-| Log Screenshots  | Done: gallery grouped by day, checkerboard 1:1 previews, hover actions (Show in folder, Delete); detail view with Transparent/Dark/Light backdrop and details; delete with confirmation |
+| Extract dialog   | Done: **Extract image** opens a modal with a live preview and the Transparent/Dark/Light backdrop; "Save as they are, or edit them first?" → **Edit** makes the preview itself editable: drag/Shift+click/Ctrl+A to select text on the image, **Italic**, a color picker (chat colors) and **Default** apply to it; click and type, Backspace/Delete/Enter, arrows/Home/End, Ctrl+Z undo |
+| Screenshot look  | Done: markup `/italic/` and `*action*` (in the /me color), markers removed; Dark/Light backdrops are a box behind each row of text, transparent elsewhere |
+| Log Screenshots  | Done: gallery grouped by day, checkerboard 1:1 previews, hover actions (Show in folder, Delete); detail view with a Transparent/Dark/Light preview (boxes behind the text rows) and details; delete with confirmation |
 | Settings page    | Done: capture status, FiveM data folder with **Browse…** (Windows folder dialog), start with Windows switch, logs/screenshots folders |
 | Branding         | Done: logo in sidebar header, exe/taskbar icon                         |
 | Chat capture     | Done: background polling of FiveM's KVS, one `.txt` per session, crash-safe appends |
@@ -35,7 +37,7 @@ screenshots, kept on the **Log Screenshots** page.
 | First-run prompts| Done: FiveM data folder (only if not found; Browse… or type), start with Windows (asked once) |
 | Persistence      | `%AppData%\WorldKit\settings.json`, `%AppData%\WorldKit\logs\YYYY\MM\*.txt`, `%AppData%\WorldKit\screenshots\*.png`, `%AppData%\WorldKit\diagnostics\` (`app.log`, `crash-*.log`) |
 | Releases         | Done: manual **Release** workflow (`.github/workflows/release.yml`) runs the checks, builds with the typed version and publishes an Inno Setup installer under a new `v<version>` tag |
-| Tests            | Animation, chat archive/parser/filter/library/summary, KVS reader, capture service, settings, diagnostics, folder picker setup, screenshot render/store, UI texts (days, durations, counts), filters, chat lines, selection menu placement, icons, gallery layout |
+| Tests            | Animation, chat archive/parser/filter/library/summary, KVS reader, capture service, settings, diagnostics, folder picker setup, screenshot render/store/markup/document edits/hit-testing/backdrop boxes, extract dialog and picture editor (lines, style, keys, restyle, undo), UI texts (days, durations, counts), filters, chat lines, selection menu placement, icons, gallery layout |
 
 ## Architecture
 
@@ -53,7 +55,8 @@ main()  (-minimized flag)               cmd/worldkit/main.go
              │   ├─ LogsPage            internal/ui/logs_page.go  liveCard + sessionRows ──► logViewer
              │   │   ├─ loadSessionEntries: Library.Sessions + Records → chatlog.Summarize (backgroundLoad)
              │   │   └─ logViewer       internal/ui/log_viewer.go logFilters → chatLineList
-             │   │       └─ selectionMenu → Extract image → screenshot.Store.Save (background) → toast → View
+             │   │       └─ selectionMenu → Extract image → extractDialog (preview via screenshot.Render, edits)
+             │   │           → Save image → screenshot.Store.Save(lines, style) (background) → toast → View
              │   ├─ ScreenshotsPage     internal/ui/screenshots_page.go shotCards ──► screenshotView; shotDeletion
              │   └─ SettingsPage        internal/ui/settings_page.go dataDirForm (Browse… → folderpicker)
              └─ prompt: dataDirPrompt (capture needs a folder) | startupPrompt (not answered yet)
@@ -102,7 +105,7 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `internal/diagnostics/`                | `Start`: `slog` → `app.log`, crash output → `crash-*.log`; `End`/`Close` |
 | `internal/folderpicker/`               | Windows "Select folder" dialog (`IFileOpenDialog` via COM, no CGO) |
 | `internal/autostart/`                  | Start with Windows via the HKCU `Run` registry key          |
-| `internal/screenshot/`                 | `Render` (lines → transparent PNG, in-game look), `Store` (save/list/load/delete in `screenshots\`) |
+| `internal/screenshot/`                 | `Render` (lines + `Style` → `Picture`, in-game look, backdrop boxes), `RowBoxes` (boxes of a saved image), layout.go (per-character placement, wrapping), picture.go (`PositionAt`, `CaretBounds`, `SelectionBounds`), `NewLine` / `ParseMarkup` (markup.go), `Document` (editable styled characters), Arial faces + cache (font.go), `Store` (save/list/load/delete in `screenshots\`) |
 | `internal/ui/app.go`                   | Event loop (window events, maximize state, HWND), `Shell` (pages, prompts, View link) |
 | `internal/ui/title_bar.go`             | `titleBar`, `moveArea`, caption buttons and glyphs          |
 | `internal/ui/sidebar.go`               | `Sidebar`, `NavItem`, `navRow`, `captureCard` (+ `captureCardTexts`) |
@@ -114,7 +117,9 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `internal/ui/selection_menu.go`        | `selectionMenu` (count, Copy, Extract image, ×), `selectionMenuOrigin` |
 | `internal/ui/line_selection.go`        | `lineSelection`: anchor/end range of whole lines (pure logic, tested) |
 | `internal/ui/screenshots_page.go`      | Log Screenshots gallery: `shotCard`, day groups, checkerboard, 1:1 image drawing |
-| `internal/ui/screenshot_view.go`       | `screenshotView` (detail, backdrops, details card), `shotDeletion` (confirm + delete) |
+| `internal/ui/extract_dialog.go`        | `extractDialog`: preview, backdrop, Italic, color swatches, Default; `fittedSize` |
+| `internal/ui/picture_editor.go`        | `pictureEditor`: select, type and undo on the rendered preview image |
+| `internal/ui/screenshot_view.go`       | `screenshotView` (detail, backdrop boxes, details card), `backdropColor`, `shotDeletion` (confirm + delete) |
 | `internal/ui/settings_page.go`         | Settings page: `settingsCard`, `settingRow`, `pathRow`      |
 | `internal/ui/capture_ui.go`            | `ui.Services` + interfaces, status text, `dataDirForm` (Browse…), first-run prompts, `openFolder` |
 | `internal/ui/button.go`                | `button`: primary / secondary / ghost / danger / icon       |
@@ -174,11 +179,36 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 - **Screenshots are rendered in pure Go**, not by Gio: `golang.org/x/image/font/opentype` draws
   onto an `image.RGBA`. No GPU, no window, unit-testable, and no new dependency (x/image was
   already required). Style follows the Chatlog Magician's output (bold Arial, black outline,
-  transparent background).
+  transparent background or a box behind each line).
 - **Arial Bold is read from Windows, not bundled.** Its license forbids redistribution, but
   every Windows install has `%WINDIR%\Fonts\arialbd.ttf` (WorldKit is Windows-only). If it is
   missing or unreadable, the bundled Go Bold is used and a warning is logged. Roboto was
-  considered; Arial matches the community's existing chat screenshots.
+  considered; Arial matches the community's existing chat screenshots. Italic uses
+  `arialbi.ttf` the same way (fallback Go Bold Italic). Parsed fonts are cached by path,
+  because the extract dialog re-renders its preview on every keystroke.
+- **Chat markup becomes styled characters.** `/italic/` and `*action*` (in the /me color)
+  are parsed once when the dialog opens (`NewLine`); both markers are removed from the
+  image. Markers only count at word edges, so `and/or`, `1/2`, `2 * 3` and the `* ` that
+  starts a /me line stay literal. The first version kept the asterisks and colored with
+  `!{#RRGGBB}` codes typed into one text field per line; users found the codes and fields
+  clumsy, so styles now live per character in `screenshot.Document`, not in the text.
+- **Editing happens on the preview image** (`pictureEditor`), not in text fields: Gio's
+  editor can't color ranges, and the picture is what the user wants to change. `Render`
+  places every character itself (`layout.go`, kerning within a face) and returns a
+  `Picture` that maps image points to caret positions and back, so clicks, drags, the caret
+  and the selection highlight line up with the drawn glyphs. Every line is rendered,
+  empty ones too, so an emptied line can still be clicked; only non-empty lines are
+  saved. The preview re-renders off the UI goroutine after each change and may trail the
+  text by a keystroke. Typed text takes the style of the character before it. Undo keeps
+  whole-document copies (a few lines each, capped at 200).
+- **Backdrops are a box per row, not a fill.** Dark (`#000000`, the Magician's default) and
+  Light draw a box behind each drawn row, as wide as that row's text plus 5 px each side,
+  rows flush, the rest of the image transparent: the same per-line `inline-block`
+  background the Magician draws, so it reads like familiar chat screenshots and covers as
+  little of the game picture as possible. One box around the whole block was the
+  alternative; it hides more of the screenshot under short lines. The choice is baked into
+  the PNG; the detail view previews it on any shot via `screenshot.RowBoxes`, which finds
+  the rows by Render's fixed 18 px grid.
 - **Screenshots live next to the logs** (`%AppData%\WorldKit\screenshots\`), flat, named by
   save time in UTC like session files (`2026-10-18_101530.png`, `_2` on collisions), written
   via a temp file + rename. `Store.Delete` refuses paths outside that folder. Previews are
@@ -309,7 +339,11 @@ graphify explain "Sidebar"
   a search box for long character lists, colored tags inside a line (e.g. blue `[INFO]`).
 - Screenshots: **Copy image** to the clipboard (Gio's clipboard is text-only; needs Win32
   `CF_PNG`/`CF_DIB`), link a screenshot back to its session, style options (font size, wrap
-  width).
+  width). Extract dialog: a custom color besides the swatches, remember the backdrop
+  between launches; picture editor: double-click to select a word, Ctrl+C/Ctrl+V,
+  Up/Down between rows, a blinking caret.
+- A second WorldKit instance exits with "keep previous app log … used by another process"
+  (diagnostics start before the single-instance check) instead of saying it's already running.
 - Sidebar counts next to Logs / Log Screenshots (the design shows them).
 - Cache session summaries if the session list gets slow.
 - Tray icon so WorldKit can keep capturing with its window closed.

@@ -11,7 +11,6 @@ import (
 	"gioui.org/widget/material"
 
 	"world-kit/internal/chatlog"
-	"world-kit/internal/screenshot"
 )
 
 // chatLine is one saved chat line shown in its in-game color, with its timestamp in a
@@ -93,15 +92,6 @@ func joinChatLines(lines []chatLine) string {
 		texts[i] = line.copyText
 	}
 	return strings.Join(texts, "\n")
-}
-
-// screenshotLines turns lines into what the screenshot renderer draws, keeping each color.
-func screenshotLines(lines []chatLine) []screenshot.Line {
-	shotLines := make([]screenshot.Line, len(lines))
-	for i, line := range lines {
-		shotLines[i] = screenshot.Line{Text: line.copyText, Color: line.color}
-	}
-	return shotLines
 }
 
 // chatLineColor returns the color GTA World's chat draws a line of this kind in.

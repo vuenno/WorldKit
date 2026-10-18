@@ -33,6 +33,7 @@ type logViewer struct {
 	copyAll   widget.Clickable
 	filters   *logFilters
 	lines     *chatLineList
+	extract   *extractDialog
 	saver     *backgroundLoad[screenshot.Shot]
 	savedShot string // path of the last saved screenshot, for the toast's View
 	toast     toast
@@ -44,6 +45,7 @@ func newLogViewer(options viewerOptions) *logViewer {
 		loader:  newBackgroundLoad[[]chatlog.Record](options.invalidate),
 		filters: newLogFilters(),
 		lines:   newChatLineList(),
+		extract: newExtractDialog(options.invalidate),
 		saver:   newBackgroundLoad[screenshot.Shot](options.invalidate),
 	}
 	v.loader.Start(func() ([]chatlog.Record, error) { return options.library.Records(options.session.Path) })
@@ -64,11 +66,18 @@ func (v *logViewer) ViewShotClicked(gtx layout.Context) (string, bool) {
 	return v.savedShot, true
 }
 
-// Layout handles input, then draws the header, filters and lines.
+// Layout handles input, then draws the header, filters and lines, and the extract dialog
+// on top while it is open.
 func (v *logViewer) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	v.receiveRecords()
 	v.receiveSavedShot(gtx)
 	v.handleInput(gtx)
+	dims := v.layoutContent(gtx, theme)
+	v.extract.Layout(gtx, theme)
+	return dims
+}
+
+func (v *logViewer) layoutContent(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	inset := layout.Inset{Left: spacingPage, Right: spacingPage, Top: spacingSmall, Bottom: spacingXLarge}
 	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -122,7 +131,10 @@ func (v *logViewer) handleInput(gtx layout.Context) {
 		v.copy(gtx, v.lines.AllText(), v.lines.Len())
 	}
 	if v.lines.ExtractClicked(gtx) {
-		v.extractSelection()
+		v.extract.Open(v.lines.SelectedLines())
+	}
+	if v.extract.Update(gtx) == extractSaveRequested {
+		v.saveShot(v.extract.Lines(), v.extract.Style())
 	}
 }
 
@@ -134,10 +146,9 @@ func (v *logViewer) copy(gtx layout.Context, text string, lineCount int) {
 	v.toast.Show(gtx.Now, "Copied "+plural(lineCount, "line", "lines"), "")
 }
 
-// extractSelection saves the selected lines as a screenshot image in the background.
-func (v *logViewer) extractSelection() {
-	lines := screenshotLines(v.lines.SelectedLines())
-	v.saver.Start(func() (screenshot.Shot, error) { return v.options.screenshots.Save(lines) })
+// saveShot saves lines as a screenshot image in the background.
+func (v *logViewer) saveShot(lines []screenshot.Line, style screenshot.Style) {
+	v.saver.Start(func() (screenshot.Shot, error) { return v.options.screenshots.Save(lines, style) })
 }
 
 func (v *logViewer) applyFilter() {

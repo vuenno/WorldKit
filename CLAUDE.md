@@ -45,8 +45,11 @@ code, whenever the change is worth noting:
   `logs\` and `screenshots\`. Chat logs are stored raw (one `.txt` per session) and parsed on
   read; never rewrite or reformat them in place. Screenshots are PNGs WorldKit renders itself
   (`internal/screenshot`, pure Go via `golang.org/x/image/font`, no GPU); deletes only ever
-  touch that folder. Their font, Arial Bold, is read from `%WINDIR%\Fonts`; never bundle it
-  (its license forbids redistribution).
+  touch that folder. Their fonts, Arial Bold and Arial Bold Italic (`arialbd.ttf`,
+  `arialbi.ttf`), are read from `%WINDIR%\Fonts` (Go Bold / Go Bold Italic as fallback);
+  never bundle them (their license forbids redistribution). Chat markup (`/italic/`,
+  `*action*`) is parsed once into styled characters (`screenshot.Document`); edits change
+  those characters, never the stored log text.
 - **Diagnostics** go to `%AppData%\WorldKit\diagnostics\` (`internal/diagnostics`, started in
   `run.go`): `slog` output in `app.log` (previous run: `app.previous.log`) and unrecovered
   panics/fatal errors in `crash-<UTC start time>.log` via `runtime/debug.SetCrashOutput`.

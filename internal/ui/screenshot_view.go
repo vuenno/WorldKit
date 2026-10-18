@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image"
+	"image/color"
 	"log/slog"
 	"os/exec"
 	"path/filepath"
@@ -23,13 +24,25 @@ const (
 	viewDeleteRequested             // Delete was clicked; the page asks for confirmation
 )
 
-// Preview backdrops: transparent shows the checkerboard; dark and light show how the text
-// reads over night and day scenes.
+// Backdrops, in segmented-control order: transparent draws nothing behind the text; dark
+// and light draw a box behind each row of it, in saved images and in previews.
 const (
 	backdropTransparent = iota
 	backdropDark
 	backdropLight
 )
+
+// backdropColor is the box color for a backdrop choice; zero (transparent) for none.
+func backdropColor(backdrop int) color.NRGBA {
+	switch backdrop {
+	case backdropDark:
+		return colorBackdropDark
+	case backdropLight:
+		return colorBackdropLight
+	default:
+		return color.NRGBA{}
+	}
+}
 
 // screenshotView shows one screenshot in full at its real pixel size, with its details,
 // Show in folder and Delete.
@@ -122,14 +135,14 @@ func (v *screenshotView) layoutPreview(gtx layout.Context, theme *material.Theme
 			size := gtx.Constraints.Max
 			shape := clip.UniformRRect(image.Rectangle{Max: size}, gtx.Dp(radiusCard))
 			defer shape.Push(gtx.Ops).Pop()
-			v.drawBackdrop(gtx, size)
+			drawChecker(gtx, size)
 			if v.shot.err != nil {
 				return layout.Center.Layout(gtx, secondaryText(theme, "Couldn't read this screenshot. You can still delete it.").Layout)
 			}
 			return styledList(theme, &v.list).Layout(gtx, 1, func(gtx layout.Context, _ int) layout.Dimensions {
 				gtx.Constraints.Min = image.Pt(gtx.Constraints.Max.X, max(size.Y, v.shot.size.Y))
 				return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return layoutImageAtPixelSize(gtx, v.shot.image, v.shot.size)
+					return layoutShotOnBackdrop(gtx, v.shot, backdropColor(v.backdrop.selected))
 				})
 			})
 		}),
@@ -155,15 +168,16 @@ func (v *screenshotView) layoutPreview(gtx layout.Context, theme *material.Theme
 	)
 }
 
-func (v *screenshotView) drawBackdrop(gtx layout.Context, size image.Point) {
-	switch v.backdrop.selected {
-	case backdropDark:
-		paint.Fill(gtx.Ops, colorBackdropDark)
-	case backdropLight:
-		paint.Fill(gtx.Ops, colorBackdropLight)
-	default:
-		drawChecker(gtx, size)
+// layoutShotOnBackdrop draws the shot at 1:1 with a box of backdrop behind each row of
+// its text, where Extract would draw them into the file. A zero backdrop draws none.
+func layoutShotOnBackdrop(gtx layout.Context, shot loadedShot, backdrop color.NRGBA) layout.Dimensions {
+	if backdrop.A > 0 {
+		shown := image.Rectangle{Max: image.Pt(min(shot.size.X, gtx.Constraints.Max.X), min(shot.size.Y, gtx.Constraints.Max.Y))}
+		for _, box := range shot.rowBoxes {
+			paint.FillShape(gtx.Ops, backdrop, clip.Rect(box.Intersect(shown)).Op())
+		}
 	}
+	return layoutImageAtPixelSize(gtx, shot.image, shot.size)
 }
 
 func (v *screenshotView) layoutDetails(gtx layout.Context, theme *material.Theme) layout.Dimensions {

@@ -20,17 +20,17 @@ func TestRender(t *testing.T) {
 		wantMinHeight int
 		wantMaxWidth  int
 	}{
-		{"one line", []Line{{"John Doe says: Hi.", white}}, lineHeightPx, maxTextWidthPx},
-		{"two lines", []Line{{"a", white}, {"b", white}}, 2 * lineHeightPx, maxTextWidthPx},
-		{"long line wraps", []Line{{longLine, white}}, 3 * lineHeightPx, maxTextWidthPx + 2*(paddingPx+outlinePx)},
+		{"one line", []Line{NewLine("John Doe says: Hi.", white, white)}, lineHeightPx, maxTextWidthPx},
+		{"two lines", []Line{NewLine("a", white, white), NewLine("b", white, white)}, 2 * lineHeightPx, maxTextWidthPx},
+		{"long line wraps", []Line{NewLine(longLine, white, white)}, 3 * lineHeightPx, maxTextWidthPx + 2*(paddingPx+outlinePx)},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			img, err := Render(test.lines)
+			picture, err := Render(test.lines, Style{})
 			if err != nil {
 				t.Fatalf("Render: %v", err)
 			}
-			size := img.Bounds().Size()
+			size := picture.Image.Bounds().Size()
 			if size.Y < test.wantMinHeight {
 				t.Errorf("height = %d, want at least %d", size.Y, test.wantMinHeight)
 			}
@@ -42,10 +42,11 @@ func TestRender(t *testing.T) {
 }
 
 func TestRenderKeepsBackgroundTransparentAndDrawsText(t *testing.T) {
-	img, err := Render([]Line{{"John Doe says: Hello there.", white}})
+	picture, err := Render([]Line{NewLine("John Doe says: Hello there.", white, white)}, Style{})
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
+	img := picture.Image
 	if corner := img.RGBAAt(0, 0); corner.A != 0 {
 		t.Errorf("corner = %v, want transparent", corner)
 	}
@@ -63,7 +64,7 @@ func TestRenderKeepsBackgroundTransparentAndDrawsText(t *testing.T) {
 }
 
 func TestRenderWithoutLines(t *testing.T) {
-	if _, err := Render(nil); !errors.Is(err, ErrNoLines) {
+	if _, err := Render(nil, Style{}); !errors.Is(err, ErrNoLines) {
 		t.Errorf("err = %v, want ErrNoLines", err)
 	}
 }
@@ -73,12 +74,12 @@ func TestStoreSaveListLoadDelete(t *testing.T) {
 	if shots, err := store.List(); err != nil || len(shots) != 0 {
 		t.Fatalf("List before saving = %v, %v; want empty", shots, err)
 	}
-	lines := []Line{{"* John Doe waves.", white}}
-	first, err := store.Save(lines)
+	lines := []Line{NewLine("* John Doe waves.", white, white)}
+	first, err := store.Save(lines, Style{})
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	second, err := store.Save(lines)
+	second, err := store.Save(lines, Style{})
 	if err != nil {
 		t.Fatalf("Save again: %v", err)
 	}
@@ -127,7 +128,7 @@ func TestStoreDeleteRefusesOtherFiles(t *testing.T) {
 
 func TestRenderFallsBackWhenArialIsMissing(t *testing.T) {
 	t.Setenv("WINDIR", t.TempDir())
-	if _, err := Render([]Line{{"John Doe says: Hi.", white}}); err != nil {
+	if _, err := Render([]Line{NewLine("John Doe says: Hi.", white, white)}, Style{}); err != nil {
 		t.Errorf("Render without Arial: %v", err)
 	}
 }

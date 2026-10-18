@@ -41,6 +41,8 @@ const (
 	iconUsers        strokeIcon = "O 9 8 4 M2 21 Q2 14 9 14 Q16 14 16 21 M16 4.5 Q19 5 19 8 Q19 11 16 11.5 M18 14.5 Q22 15.5 22 21"
 	iconCheck        strokeIcon = "M20 6 L9 17 L4 12"
 	iconArrowRight   strokeIcon = "M5 12 H19 M13 6 L19 12 L13 18"
+	iconPencil       strokeIcon = "M4 20 V16 L15 5 L19 9 L8 20 Z M13 7 L17 11"
+	iconItalic       strokeIcon = "M10 4 H19 M5 20 H14 M15 4 L9 20"
 )
 
 // iconStrokeWidth is the stroke width on the 24-unit grid.

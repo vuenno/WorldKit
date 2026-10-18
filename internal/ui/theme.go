@@ -48,11 +48,29 @@ var (
 	colorChatHeader  = rgb(0x939799) // session start line
 )
 
-// Screenshot preview backdrops: a checkerboard says "transparent" at a glance.
+// Extra text colors offered by the extract dialog's color picker: the in-game color codes
+// (~r~, ~g~, ~b~, ~c~, ~m~) as the Chatlog Magician draws them.
+var (
+	colorChatRed   = rgb(0xF00000)
+	colorChatGreen = rgb(0x56D64B)
+	colorChatBlue  = rgb(0x3896F3)
+	colorChatCyan  = rgb(0x33C1C9)
+	colorChatPink  = rgb(0xFF00BC)
+)
+
+// textSwatches are the extract dialog's color picker, in order: chat colors first.
+var textSwatches = []color.NRGBA{
+	colorChatSay, colorChatLow, colorChatEmote, colorChatWhisper, colorChatPM,
+	colorChatRed, colorChatGreen, colorChatBlue, colorChatCyan, colorChatPink,
+}
+
+// Screenshot backdrops: a checkerboard says "transparent" at a glance. Dark and Light are
+// boxes behind each row of text, in the saved PNG and in previews; dark is the Chatlog
+// Magician's black.
 var (
 	colorCheckerLight  = rgb(0x22252C)
 	colorCheckerDark   = rgb(0x1B1D23)
-	colorBackdropDark  = rgb(0x0B0C0E)
+	colorBackdropDark  = rgb(0x000000)
 	colorBackdropLight = rgb(0xD9DCE1)
 )
 
@@ -140,6 +158,11 @@ const (
 	screenshotDetailsWidth  = unit.Dp(300)
 	detailLabelWidth        = unit.Dp(64)
 	checkerSquare           = unit.Dp(8)
+
+	extractDialogWidth = unit.Dp(720)
+	swatchSize         = unit.Dp(22)
+	swatchRingWidth    = unit.Dp(2) // the ring around a hovered color swatch
+	caretWidth         = unit.Dp(1) // the caret when editing text on a screenshot preview
 )
 
 // Window chrome: WorldKit draws its own title bar instead of the Windows one.
