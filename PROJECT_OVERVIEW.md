@@ -13,7 +13,8 @@ WorldKit is a small, **Windows-only** (amd64) desktop application written in Go 
 toolkit. Its visual identity is a dark UI with a single orange accent and the "WK WorldKit"
 logo (sunset city skyline). It is a companion tool for players of **GTA World** (GTA:W), a
 roleplay server on FiveM. Its first feature is **chat log capture**: saving the in-game chat,
-which the game itself throws away on every reconnect, to plain text files on disk.
+which the game itself throws away on every reconnect, to plain text files on disk, and
+browsing them in a **log viewer** with name and kind filters.
 
 ## Current state
 
@@ -21,16 +22,16 @@ which the game itself throws away on every reconnect, to plain text files on dis
 |------------------|------------------------------------------------------------------------|
 | App shell        | Done: window, dark background, sidebar + page area                     |
 | Sidebar          | Done: collapsible (200 ↔ 58 dp), 200 ms ease-in-out animation, hover/active states |
-| Navigation       | Done: Home, Explore, Map, Library, Settings (switch the page title)     |
-| Home page        | Done: centered logo hero + welcome text + capture status line          |
+| Navigation       | Done: Logs, Settings (Home/Explore/Map/Library were removed for now)   |
+| Logs page        | Done: saved sessions newest first (start time, last updated, session #) + capture status; reloads when shown and after new lines are saved |
+| Log viewer       | Done: lines in GTA:W's in-game chat colors (12 sp, scrollbar), filter by name and by /me, /do, /b (OOC); drag/Shift+click/Ctrl+A to select lines; Copy or Ctrl+C copies the selection (or all visible lines) |
 | Settings page    | Done: capture status, open logs folder, FiveM data folder, start with Windows |
-| Other pages      | Placeholders ("This page is empty for now.")                           |
-| Branding         | Done: logo in sidebar header, Home hero, exe/title bar/taskbar icon    |
+| Branding         | Done: logo in sidebar header, exe/title bar/taskbar icon               |
 | Chat capture     | Done: background polling of FiveM's KVS, one `.txt` per session, crash-safe appends |
-| Chat parsing     | Done (no UI yet): `chatlog.Parse` → records with time, kind, speaker, text |
+| Chat parsing     | Done: `chatlog.Parse` → records with time, kind, speaker, text; `chatlog.Filter` |
 | First-run prompts| Done: FiveM data folder (only if not found), start with Windows (asked once) |
 | Persistence      | `%AppData%\WorldKit\settings.json` and `%AppData%\WorldKit\logs\YYYY\MM\*.txt` |
-| Tests            | Animation, chat archive/parser, KVS reader, capture service, settings, status text |
+| Tests            | Animation, chat archive/parser/filter/library, KVS reader, capture service, settings, status and session texts, background load |
 
 ## Architecture
 
@@ -44,9 +45,12 @@ main()  (-minimized flag)               cmd/worldkit/main.go
          └─ Shell                       internal/ui/app.go   sidebar + selected page + prompt
              ├─ Sidebar                 internal/ui/sidebar.go
              │   ├─ header: toggle button + brand (Logo + "WorldKit"), fades when collapsing
-             │   ├─ NavItem × N  ──► navRow (shared icon + label row renderer)
+             │   ├─ NavItem × 2 (Logs, Settings) ──► navRow (shared icon + label row renderer)
              │   └─ expandAnimation     internal/ui/animation.go
-             ├─ page: layoutHomePage | SettingsPage | layoutPlaceholderPage
+             ├─ page: LogsPage | SettingsPage
+             │   └─ LogsPage            internal/ui/logs_page.go  sessionRow list ──► logViewer
+             │       ├─ chatlog.Library.Sessions / Records    read off the UI goroutine (backgroundLoad)
+             │       └─ logViewer       internal/ui/log_viewer.go chatlog.Filter → chatLineList (colored lines, line selection)
              └─ prompt: dataDirPrompt (capture needs a folder) | startupPrompt (not answered yet)
 Logo                                    internal/ui/logo.go  resamples per pixel size, cached
 theme tokens (colors, sizes, timing)    internal/ui/theme.go mirrors DESIGN.md
@@ -54,8 +58,9 @@ assets.Logo()                           assets/assets.go     embedded logo.png, 
 ```
 
 The UI talks to domain code only through the small interfaces in `ui.Services`
-(`CaptureService`, `SettingsStore`, `StartupEntry`); capture calls `window.Invalidate` when its
-status changes.
+(`CaptureService`, `SettingsStore`, `LogLibrary`, `StartupEntry`); capture calls
+`window.Invalidate` when its status changes, and so does `backgroundLoad` when a disk read
+finishes.
 
 ### Chat capture data flow
 
@@ -70,6 +75,9 @@ status changes.
    new file; dropped oldest lines are handled by overlap matching.
 4. Files: `%AppData%\WorldKit\logs\2026\10\2026-10-18_095701.txt`, exactly as the game wrote them.
    `chatlog.Parse` turns a file into records when needed.
+5. The Logs page lists files via `chatlog.Library` (read-only; start time from the file name,
+   "last updated" from its modification time, session # by age). The viewer parses one file and
+   shows the lines that pass `chatlog.Filter`, still exactly as stored.
 
 Gio is immediate-mode: every frame, `Layout` methods handle input first, then draw. Widget state
 (`widget.Clickable`, animation state, selection) lives in structs that persist across frames.
@@ -81,15 +89,21 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `cmd/worldkit/main.go`                 | Parses `-minimized`, starts `run` and the Gio main loop     |
 | `cmd/worldkit/run.go`                  | Builds settings, capture service, startup entry, window (960×600, min 640×400) |
 | `internal/fivem/`                      | Finds FiveM's KVS, copies it, reads the GTA World chat log; MessagePack string decoder |
-| `internal/chatlog/`                    | `Archive` (session files, lock, crash repair) and `Parse` (line kinds, midnight rollover) |
+| `internal/chatlog/`                    | `Archive` (session files, lock, crash repair), `Parse` (line kinds, midnight rollover), `Library` (list/read sessions), `Filter` (name + kinds) |
 | `internal/capture/`                    | Background `Service`: polling loop, data folder changes, `Status` |
 | `internal/settings/`                   | `settings.json` load + atomic save                          |
 | `internal/autostart/`                  | Start with Windows via the HKCU `Run` registry key          |
+| `internal/ui/logs_page.go`             | Logs page: session list, `sessionRow`, session title/date texts |
+| `internal/ui/log_viewer.go`            | `logViewer`: name field, kind toggles, Copy, line list      |
+| `internal/ui/chat_line.go`             | `chatLine` (one colored line), `chatLineColor` (kind → in-game color) |
+| `internal/ui/chat_line_list.go`        | `chatLineList`: scrolling lines, mouse/keyboard line selection, copy text |
+| `internal/ui/line_selection.go`        | `lineSelection`: anchor/end range of whole lines (pure logic, tested) |
+| `internal/ui/load.go`                  | `backgroundLoad`: one disk read at a time off the UI goroutine |
 | `internal/ui/settings_page.go`         | Settings page                                               |
 | `internal/ui/capture_ui.go`            | `ui.Services`, status text, data folder form, first-run prompts, text field |
-| `internal/ui/button.go`, `dialog.go`   | Primary/secondary buttons; modal dialog and `card`          |
+| `internal/ui/button.go`, `dialog.go`   | Primary/secondary/toggle buttons; modal dialog, `card`, `outlinedSurface` |
 | `cmd/worldkit/rsrc_windows_amd64.syso` | Generated exe icon + manifest; linked automatically by `go build` |
-| `internal/ui/app.go`                   | Event loop, `Shell`, pages, `pageTitle`/`caption` helpers   |
+| `internal/ui/app.go`                   | Event loop, `Shell` (page switching, reload on show), `pageTitle`/`caption` helpers |
 | `internal/ui/sidebar.go`               | `Sidebar`, `NavItem`, `navRow`, divider/border helpers      |
 | `internal/ui/animation.go`             | `expandAnimation` (reversible 0↔1 progress) + easing        |
 | `internal/ui/logo.go`                  | `Logo` widget (sharp at any DPI)                            |
@@ -106,7 +120,7 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 - **Windows only.** Product decision. No cross-platform code paths or resources.
 - **Logo resampled at runtime** (`golang.org/x/image/draw`, Catmull-Rom). Gio only scales
   images linearly with no mipmaps, which looks jagged when shrinking. The PNG is 384 px:
-  enough for the 160 dp hero up to ~240% display scaling while keeping the exe small.
+  enough for a 160 dp hero up to ~240% display scaling while keeping the exe small.
 - **One-off tools via `go run module@version`**, not `go.mod` `tool` entries, to keep the module
   graph minimal (e.g. `go-winres` for the exe icon; the command is in `CLAUDE.md`).
 - **Chat comes from FiveM's KVS, read passively.** Community tools instead attach to FiveM's CEF
@@ -124,6 +138,18 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 - **Timestamps are UTC**, as the game writes them; shown as-is.
 - **Single instance per archive:** `archive.lock` is held open with no sharing; a second WorldKit
   shows "already running" instead of writing.
+- **Log viewer selects whole lines, not characters.** Each line is its own label so it keeps
+  its in-game color (Gio's editor/selectable paints all text with one material, applied per
+  wrapped line, so it can't color by chat line), and only on-screen lines are laid out. One
+  pointer handler over the list maps the mouse y to a line using last frame's row heights
+  (`chatLineList.lineAt`). Trade-off: no partial-line selection; whole lines are what players
+  paste into forums and screenshot tools anyway.
+- **Chat colors come from the GTA World Chatlog Magician**
+  (github.com/flipperatol121/chatlog-magician, the FiveM-era fork), which recreates the in-game
+  chat. One color per line: `[INFO]` lines are white, although the game draws the `[INFO]` tag
+  blue; "near you" vs "far" brightness for says is not modeled.
+- **Name filter matches speaker or mention**, case-insensitive, `_` = space, so "Jane" also finds
+  `* John Doe looks at Jane Roe.`; selecting no kind toggle shows all kinds.
 - **Collapsed sidebar width is derived**, not hard-coded: `2 × (8 + 12) + 18 = 58 dp`, so icons
   sit at the same x position in both states and never jump during the animation.
 
@@ -136,6 +162,10 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 - **Visual checks without a screen:** the app window may open behind other windows, so
   synthetic clicks/screenshots of the real window are unreliable. Render off-screen instead with
   `gioui.org/gpu/headless` in a throwaway `_test.go` and drive input through `input.Router`.
+  Don't queue `pointer.Drag` (the router panics); queue a `pointer.Move` with `Buttons` set and
+  the router turns it into a drag.
+- **CRLF checkout:** `core.autocrlf=true` checks files out with CRLF, so `gofmt -l .` lists
+  unchanged files locally. Git stores LF; check with `git ls-files --eol`.
 - **Claude desktop sandbox:** tools run inside a packaged app, so writes under `%APPDATA%` are
   redirected to a private folder. Install user-level tools elsewhere (graphify lives under
   `%USERPROFILE%\.local`).
@@ -177,8 +207,9 @@ graphify explain "Sidebar"
 ## Next steps (not started)
 
 - Verify capture while FiveM is running (live copy of the KVS) with a real play session.
-- Chat log browser: list sessions by date, search text, filter by kind/speaker (uses `chatlog.Parse`).
+- Log viewer: live-update the open session as new lines arrive (today it reads once on open),
+  free-text search, more kind toggles (says, PMs), colored tags inside a line (e.g. blue `[INFO]`).
 - Tray icon so WorldKit can keep capturing with its window closed.
 - Folder picker dialog for the FiveM data folder (today the path is typed/pasted).
-- Give the remaining nav destinations real content.
+- Bring back more nav destinations when they have real content.
 - Persist sidebar expanded/collapsed state and last page between launches.

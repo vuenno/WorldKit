@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image"
+	"image/color"
 
 	"gioui.org/layout"
 	"gioui.org/op/clip"
@@ -41,12 +42,7 @@ func card(gtx layout.Context, content layout.Widget) layout.Dimensions {
 	gtx.Constraints.Min.X = gtx.Constraints.Max.X
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			size := gtx.Constraints.Min
-			shape := clip.UniformRRect(image.Rectangle{Max: size}, gtx.Dp(cornerRadius))
-			paint.FillShape(gtx.Ops, colorSurface, shape.Op(gtx.Ops))
-			border := clip.Stroke{Path: shape.Path(gtx.Ops), Width: float32(gtx.Dp(borderWidth))}
-			paint.FillShape(gtx.Ops, colorBorder, border.Op())
-			return layout.Dimensions{Size: size}
+			return outlinedSurface(gtx, colorSurface)
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			// Stack clears Min for stacked children; restore the full width.
@@ -54,4 +50,15 @@ func card(gtx layout.Context, content layout.Widget) layout.Dimensions {
 			return layout.UniformInset(spacingLarge).Layout(gtx, content)
 		}),
 	)
+}
+
+// outlinedSurface fills the minimum size with a rounded panel and a 1 dp border.
+// It is the background of cards, text fields and list rows.
+func outlinedSurface(gtx layout.Context, fill color.NRGBA) layout.Dimensions {
+	size := gtx.Constraints.Min
+	shape := clip.UniformRRect(image.Rectangle{Max: size}, gtx.Dp(cornerRadius))
+	paint.FillShape(gtx.Ops, fill, shape.Op(gtx.Ops))
+	border := clip.Stroke{Path: shape.Path(gtx.Ops), Width: float32(gtx.Dp(borderWidth))}
+	paint.FillShape(gtx.Ops, colorBorder, border.Op())
+	return layout.Dimensions{Size: size}
 }

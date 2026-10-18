@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 )
@@ -123,7 +122,7 @@ func (a *Archive) openSession(header string, capturedAt time.Time) error {
 // sessionPath files sessions by year and month, e.g. logs/2026/10/2026-10-18_095701.txt.
 func sessionPath(dir string, start time.Time) string {
 	return filepath.Join(dir, start.Format("2006"), start.Format("01"),
-		start.Format("2006-01-02_150405")+sessionFileExt)
+		start.Format(sessionNameLayout)+sessionFileExt)
 }
 
 func unusedPath(path string) string {
@@ -141,25 +140,12 @@ func fileExists(path string) bool {
 }
 
 // newestSessionFile returns the most recent session file, or "" when there is none.
-// File names sort chronologically, so the lexically greatest path is the newest.
 func newestSessionFile(dir string) (string, error) {
-	var paths []string
-	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !entry.IsDir() && filepath.Ext(path) == sessionFileExt {
-			paths = append(paths, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return "", fmt.Errorf("list sessions in %q: %w", dir, err)
+	paths, err := sessionFiles(dir)
+	if err != nil || len(paths) == 0 {
+		return "", err
 	}
-	if len(paths) == 0 {
-		return "", nil
-	}
-	return slices.Max(paths), nil
+	return paths[len(paths)-1], nil
 }
 
 // continuation returns the part of text that comes after the saved lines, or false when text

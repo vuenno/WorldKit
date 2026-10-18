@@ -12,6 +12,7 @@ import (
 
 	"world-kit/internal/autostart"
 	"world-kit/internal/capture"
+	"world-kit/internal/chatlog"
 	"world-kit/internal/settings"
 	"world-kit/internal/ui"
 )
@@ -31,8 +32,9 @@ func run(isMinimized bool) error {
 	}
 
 	window := newWindow(isMinimized)
+	archiveDir := filepath.Join(dataDir, "logs")
 	captureService := capture.New(capture.Options{
-		ArchiveDir: filepath.Join(dataDir, "logs"),
+		ArchiveDir: archiveDir,
 		DataDir:    store.Get().FiveMDataDir,
 		OnChange:   window.Invalidate,
 	})
@@ -47,7 +49,9 @@ func run(isMinimized bool) error {
 		<-captureStopped
 	}()
 
-	return ui.Run(window, newServices(captureService, store))
+	services := newServices(captureService, store)
+	services.Logs = chatlog.NewLibrary(archiveDir)
+	return ui.Run(window, services)
 }
 
 func newWindow(isMinimized bool) *app.Window {

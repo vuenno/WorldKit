@@ -28,6 +28,11 @@ func secondaryButton(click *widget.Clickable, label string) button {
 	return button{click: click, label: label}
 }
 
+// toggleButton is an on/off filter button: primary while on, secondary while off.
+func toggleButton(click *widget.Clickable, label string, isOn bool) button {
+	return button{click: click, label: label, isPrimary: isOn}
+}
+
 func (b button) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	return b.click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Min = image.Point{}

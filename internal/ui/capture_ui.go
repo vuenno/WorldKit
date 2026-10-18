@@ -3,17 +3,15 @@ package ui
 import (
 	"errors"
 	"fmt"
-	"image"
 	"log/slog"
 	"os/exec"
 
 	"gioui.org/layout"
-	"gioui.org/op/clip"
-	"gioui.org/op/paint"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
 	"world-kit/internal/capture"
+	"world-kit/internal/chatlog"
 	"world-kit/internal/fivem"
 	"world-kit/internal/settings"
 )
@@ -22,7 +20,14 @@ import (
 type Services struct {
 	Capture  CaptureService
 	Settings SettingsStore
+	Logs     LogLibrary
 	Startup  StartupEntry // nil when the startup entry is unavailable
+}
+
+// LogLibrary lists the saved chat sessions and reads their lines.
+type LogLibrary interface {
+	Sessions() ([]chatlog.Session, error)
+	Records(path string) ([]chatlog.Record, error)
 }
 
 // CaptureService reports chat capture progress and accepts a user-picked FiveM data folder.
@@ -211,12 +216,7 @@ func (p *startupPrompt) Layout(gtx layout.Context, theme *material.Theme) layout
 func textField(gtx layout.Context, theme *material.Theme, editor *widget.Editor, hint string) layout.Dimensions {
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			size := gtx.Constraints.Min
-			shape := clip.UniformRRect(image.Rectangle{Max: size}, gtx.Dp(cornerRadius))
-			paint.FillShape(gtx.Ops, colorElevatedSurface, shape.Op(gtx.Ops))
-			border := clip.Stroke{Path: shape.Path(gtx.Ops), Width: float32(gtx.Dp(borderWidth))}
-			paint.FillShape(gtx.Ops, colorBorder, border.Op())
-			return layout.Dimensions{Size: size}
+			return outlinedSurface(gtx, colorElevatedSurface)
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min.X = gtx.Constraints.Max.X

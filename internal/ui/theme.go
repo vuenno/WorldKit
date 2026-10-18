@@ -22,8 +22,24 @@ var (
 	colorScrim           = withOpacity(colorAppBackground, 0.8)
 )
 
+// Chat colors: how GTA World's in-game chat draws each kind of line, so saved logs look
+// the way they did in game. Values from the GTA World Chatlog Magician, a community tool
+// that recreates the in-game chat. See DESIGN.md.
+var (
+	colorChatSay     = rgb(0xF1F1F1) // says, shouts, server messages
+	colorChatLow     = rgb(0xC6C4C4) // says [low]
+	colorChatWhisper = rgb(0xEDA841)
+	colorChatEmote   = rgb(0xC2A3DA) // /me and /do
+	colorChatOOC     = rgb(0xB8BEC7) // /b
+	colorChatPM      = rgb(0xFBF724)
+	colorChatHeader  = rgb(0x939799) // session start line
+)
+
 // selectionOpacity tints selected text with the accent without hiding it.
 const selectionOpacity = 0.4
+
+// lineSelectionOpacity is lighter for whole selected chat lines, so their colors stay readable.
+const lineSelectionOpacity = 0.18
 
 const appName = "WorldKit"
 
@@ -34,6 +50,7 @@ const (
 	textSizeBody      = unit.Sp(13)
 	textSizeNavLabel  = unit.Sp(13)
 	textSizeCaption   = unit.Sp(11)
+	textSizeChatLine  = unit.Sp(12)
 )
 
 // Spacing and component sizes.
@@ -49,7 +66,6 @@ const (
 	borderWidth   = unit.Dp(1)
 
 	logoSizeSidebar = unit.Dp(28)
-	logoSizeHero    = unit.Dp(160)
 
 	buttonHeight    = unit.Dp(32)
 	buttonPaddingX  = spacingMedium

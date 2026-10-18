@@ -99,7 +99,8 @@ assets/              embedded files (//go:embed). logo.png (384×384, transparen
   `DESIGN.md`. Follow `DESIGN.md` for every visual decision; update both together.
   No magic numbers in layouts.
 - Never block the UI goroutine. Do slow work in a goroutine, then send the result back and call
-  `window.Invalidate()`.
+  `window.Invalidate()`. For one-shot reads (disk, parsing) use `backgroundLoad` in
+  `internal/ui/load.go`: `Start` in input handling, `Result` at the top of `Layout`.
 - Animations: use `expandAnimation` (or a sibling type in `animation.go`) driven by `gtx.Now`;
   request frames with `gtx.Execute(op.InvalidateCmd{})` only while animating.
 - Constraints gotcha: `layout.W`/`E` keep `Min.Y` (and `N`/`S` keep `Min.X`). Clear the other
