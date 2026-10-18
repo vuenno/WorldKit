@@ -11,39 +11,27 @@ import (
 	"world-kit/internal/chatlog"
 )
 
-// kindToggle is one on/off filter for a kind of chat line.
-type kindToggle struct {
-	kind  chatlog.Kind
-	label string
-	click widget.Clickable
-	isOn  bool
-}
-
-// logViewer shows one session's lines, filtered by name and kind, as selectable text.
+// logViewer shows one session's lines, filtered by action and character, as colored lines.
 type logViewer struct {
-	session     chatlog.Session
-	records     []chatlog.Record
-	loader      *backgroundLoad[[]chatlog.Record]
-	errorText   string
-	back        widget.Clickable
-	copy        widget.Clickable
-	nameField   widget.Editor
-	kindToggles []*kindToggle
-	lines       *chatLineList
-	hasCopied   bool
+	session           chatlog.Session
+	records           []chatlog.Record
+	loader            *backgroundLoad[[]chatlog.Record]
+	errorText         string
+	back              widget.Clickable
+	copy              widget.Clickable
+	filterButton      widget.Clickable
+	isFilterPanelOpen bool
+	filters           *logFilters
+	lines             *chatLineList
+	hasCopied         bool
 }
 
 func newLogViewer(session chatlog.Session, library LogLibrary, invalidate func()) *logViewer {
 	v := &logViewer{
-		session:   session,
-		loader:    newBackgroundLoad[[]chatlog.Record](invalidate),
-		nameField: widget.Editor{SingleLine: true},
-		lines:     newChatLineList(),
-		kindToggles: []*kindToggle{
-			{kind: chatlog.KindMe, label: "/me"},
-			{kind: chatlog.KindDo, label: "/do"},
-			{kind: chatlog.KindOOC, label: "/b (OOC)"},
-		},
+		session: session,
+		loader:  newBackgroundLoad[[]chatlog.Record](invalidate),
+		filters: newLogFilters(),
+		lines:   newChatLineList(),
 	}
 	v.loader.Start(func() ([]chatlog.Record, error) { return library.Records(session.Path) })
 	return v
@@ -54,16 +42,15 @@ func (v *logViewer) BackClicked(gtx layout.Context) bool {
 	return v.back.Clicked(gtx)
 }
 
-// Layout handles input, then draws the header, filters and the session text.
+// Layout handles input, then draws the header, the filter panel when open and the session text.
 func (v *logViewer) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	v.receiveRecords()
 	v.handleInput(gtx)
 	return layout.UniformInset(spacingLarge).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return v.layoutHeader(gtx, theme) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return v.layoutFilterPanel(gtx, theme) }),
 			layout.Rigid(layout.Spacer{Height: spacingMedium}.Layout),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return v.layoutFilters(gtx, theme) }),
-			layout.Rigid(layout.Spacer{Height: spacingSmall}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return v.layoutSummary(gtx, theme) }),
 			layout.Rigid(layout.Spacer{Height: spacingSmall}.Layout),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return v.layoutText(gtx, theme) }),
@@ -81,27 +68,15 @@ func (v *logViewer) receiveRecords() {
 		v.errorText = "Couldn't read this log."
 	}
 	v.records = result.value
+	v.filters.SetCharacters(chatlog.Characters(v.records))
 	v.applyFilter()
 }
 
 func (v *logViewer) handleInput(gtx layout.Context) {
-	isFilterChanged := false
-	for {
-		event, ok := v.nameField.Update(gtx)
-		if !ok {
-			break
-		}
-		if _, ok := event.(widget.ChangeEvent); ok {
-			isFilterChanged = true
-		}
+	if v.filterButton.Clicked(gtx) {
+		v.isFilterPanelOpen = !v.isFilterPanelOpen
 	}
-	for _, toggle := range v.kindToggles {
-		if toggle.click.Clicked(gtx) {
-			toggle.isOn = !toggle.isOn
-			isFilterChanged = true
-		}
-	}
-	if isFilterChanged {
+	if v.filters.Update(gtx) {
 		v.applyFilter()
 	}
 	isCopyRequested := v.lines.Update(gtx)
@@ -112,19 +87,9 @@ func (v *logViewer) handleInput(gtx layout.Context) {
 }
 
 func (v *logViewer) applyFilter() {
-	visible := v.filter().Apply(v.records)
-	v.lines.SetLines(newChatLines(visible))
+	visible := v.filters.Filter().Apply(v.records)
+	v.lines.SetLines(newChatLines(visible, v.filters.ShowsTimestamps()))
 	v.hasCopied = false
-}
-
-func (v *logViewer) filter() chatlog.Filter {
-	filter := chatlog.Filter{Name: v.nameField.Text()}
-	for _, toggle := range v.kindToggles {
-		if toggle.isOn {
-			filter.Kinds = append(filter.Kinds, toggle.kind)
-		}
-	}
-	return filter
 }
 
 func (v *logViewer) layoutHeader(gtx layout.Context, theme *material.Theme) layout.Dimensions {
@@ -142,26 +107,31 @@ func (v *logViewer) layoutHeader(gtx layout.Context, theme *material.Theme) layo
 		}),
 		layout.Rigid(layout.Spacer{Width: spacingMedium}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			activeCount := v.filters.ActiveCount()
+			return toggleButton(&v.filterButton, filterButtonLabel(activeCount), activeCount > 0).Layout(gtx, theme)
+		}),
+		layout.Rigid(layout.Spacer{Width: spacingSmall}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return primaryButton(&v.copy, "Copy").Layout(gtx, theme)
 		}),
 	)
 }
 
-func (v *logViewer) layoutFilters(gtx layout.Context, theme *material.Theme) layout.Dimensions {
-	children := []layout.FlexChild{
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return textField(gtx, theme, &v.nameField, "Filter by name, e.g. John Doe")
-		}),
+// filterButtonLabel names the button and how many filter options are on.
+func filterButtonLabel(activeCount int) string {
+	if activeCount == 0 {
+		return "Filters"
 	}
-	for _, toggle := range v.kindToggles {
-		children = append(children,
-			layout.Rigid(layout.Spacer{Width: spacingSmall}.Layout),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return toggleButton(&toggle.click, toggle.label, toggle.isOn).Layout(gtx, theme)
-			}),
-		)
+	return fmt.Sprintf("Filters (%d)", activeCount)
+}
+
+func (v *logViewer) layoutFilterPanel(gtx layout.Context, theme *material.Theme) layout.Dimensions {
+	if !v.isFilterPanelOpen {
+		return layout.Dimensions{}
 	}
-	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
+	return layout.Inset{Top: spacingMedium}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return v.filters.Layout(gtx, theme)
+	})
 }
 
 func (v *logViewer) layoutSummary(gtx layout.Context, theme *material.Theme) layout.Dimensions {

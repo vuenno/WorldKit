@@ -37,7 +37,7 @@ func TestSessionTexts(t *testing.T) {
 func TestChatLinesKeepRawText(t *testing.T) {
 	records := []chatlog.Record{{Raw: "[09:57:03] * Jane Roe waves."}, {Raw: "(( Jane Roe: brb ))"}}
 	want := "[09:57:03] * Jane Roe waves.\n(( Jane Roe: brb ))"
-	if got := joinChatLines(newChatLines(records)); got != want {
+	if got := joinChatLines(newChatLines(records, true)); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }

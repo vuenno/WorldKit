@@ -18,11 +18,16 @@ type chatLine struct {
 	color color.NRGBA
 }
 
-// newChatLines prepares records for display, keeping each line exactly as stored.
-func newChatLines(records []chatlog.Record) []chatLine {
+// newChatLines prepares records for display, each line exactly as stored, minus its
+// timestamp unless showsTimestamps.
+func newChatLines(records []chatlog.Record, showsTimestamps bool) []chatLine {
 	lines := make([]chatLine, len(records))
 	for i, record := range records {
-		lines[i] = chatLine{text: record.Raw, color: chatLineColor(record)}
+		text := record.Raw
+		if !showsTimestamps {
+			text = record.RawWithoutTimestamp()
+		}
+		lines[i] = chatLine{text: text, color: chatLineColor(record)}
 	}
 	return lines
 }
