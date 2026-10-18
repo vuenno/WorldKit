@@ -9,6 +9,7 @@ import (
 	"gioui.org/widget/material"
 
 	"world-kit/internal/chatlog"
+	"world-kit/internal/screenshot"
 )
 
 // logViewer shows one session's lines, filtered by action and character, as colored lines.
@@ -24,14 +25,20 @@ type logViewer struct {
 	filters           *logFilters
 	lines             *chatLineList
 	hasCopied         bool
+	screenshots       ScreenshotStore
+	saver             *backgroundLoad[screenshot.Shot]
+	hasSavedShot      bool
+	saveErrorText     string
 }
 
-func newLogViewer(session chatlog.Session, library LogLibrary, invalidate func()) *logViewer {
+func newLogViewer(session chatlog.Session, library LogLibrary, screenshots ScreenshotStore, invalidate func()) *logViewer {
 	v := &logViewer{
-		session: session,
-		loader:  newBackgroundLoad[[]chatlog.Record](invalidate),
-		filters: newLogFilters(),
-		lines:   newChatLineList(),
+		session:     session,
+		loader:      newBackgroundLoad[[]chatlog.Record](invalidate),
+		filters:     newLogFilters(),
+		lines:       newChatLineList(),
+		screenshots: screenshots,
+		saver:       newBackgroundLoad[screenshot.Shot](invalidate),
 	}
 	v.loader.Start(func() ([]chatlog.Record, error) { return library.Records(session.Path) })
 	return v
@@ -45,6 +52,7 @@ func (v *logViewer) BackClicked(gtx layout.Context) bool {
 // Layout handles input, then draws the header, the filter panel when open and the session text.
 func (v *logViewer) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	v.receiveRecords()
+	v.receiveSavedShot()
 	v.handleInput(gtx)
 	return layout.UniformInset(spacingLarge).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -84,6 +92,30 @@ func (v *logViewer) handleInput(gtx layout.Context) {
 		copyToClipboard(gtx, v.lines.CopyText())
 		v.hasCopied = true
 	}
+	if v.lines.ExtractClicked(gtx) {
+		v.extractSelection()
+	}
+}
+
+// extractSelection saves the selected lines as a screenshot image in the background.
+func (v *logViewer) extractSelection() {
+	lines := screenshotLines(v.lines.SelectedLines())
+	v.hasSavedShot = false
+	v.saveErrorText = ""
+	v.saver.Start(func() (screenshot.Shot, error) { return v.screenshots.Save(lines) })
+}
+
+func (v *logViewer) receiveSavedShot() {
+	result, ok := v.saver.Result()
+	if !ok {
+		return
+	}
+	if result.err != nil {
+		slog.Error("save chat screenshot", "error", result.err)
+		v.saveErrorText = "Couldn't save the screenshot."
+		return
+	}
+	v.hasSavedShot = true
 }
 
 func (v *logViewer) applyFilter() {
@@ -138,7 +170,12 @@ func (v *logViewer) layoutSummary(gtx layout.Context, theme *material.Theme) lay
 	if v.errorText != "" {
 		return errorCaption(gtx, theme, v.errorText)
 	}
-	return caption(theme, v.summaryText()).Layout(gtx)
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(caption(theme, v.summaryText()).Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return errorCaption(gtx, theme, v.saveErrorText)
+		}),
+	)
 }
 
 func (v *logViewer) summaryText() string {
@@ -151,6 +188,11 @@ func (v *logViewer) summaryText() string {
 	}
 	if v.hasCopied {
 		summary += " Copied to the clipboard."
+	}
+	if v.saver.IsLoading() {
+		summary += " Saving screenshot…"
+	} else if v.hasSavedShot {
+		summary += " Screenshot saved to Log Screenshots."
 	}
 	return summary
 }
@@ -177,4 +219,3 @@ func (v *logViewer) layoutLines(gtx layout.Context, theme *material.Theme) layou
 	}
 	return v.lines.Layout(gtx, theme)
 }
-

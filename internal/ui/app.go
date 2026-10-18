@@ -35,33 +35,38 @@ func Run(window *app.Window, services Services) error {
 // Shell is the top-level layout: sidebar on the left, the selected page on the right,
 // and any prompt that needs an answer on top.
 type Shell struct {
-	services      Services
-	logsItem      *NavItem
-	settingsItem  *NavItem
-	shownItem     *NavItem
-	sidebar       *Sidebar
-	logsPage      *LogsPage
-	settingsPage  *SettingsPage
-	dataDirPrompt *dataDirPrompt
-	startupPrompt *startupPrompt
+	services        Services
+	logsItem        *NavItem
+	screenshotsItem *NavItem
+	settingsItem    *NavItem
+	shownItem       *NavItem
+	sidebar         *Sidebar
+	logsPage        *LogsPage
+	screenshotsPage *ScreenshotsPage
+	settingsPage    *SettingsPage
+	dataDirPrompt   *dataDirPrompt
+	startupPrompt   *startupPrompt
 }
 
 // NewShell creates the shell with WorldKit's navigation destinations. invalidate redraws
 // the window when background work finishes.
 func NewShell(services Services, invalidate func()) *Shell {
 	logsItem := NewNavItem("Logs", icons.ActionDescription)
+	screenshotsItem := NewNavItem("Log Screenshots", icons.ImagePhotoLibrary)
 	settingsItem := NewNavItem("Settings", icons.ActionSettings)
 	settingsPage := NewSettingsPage()
 	settingsPage.SyncStartupSwitch(services.Startup)
 	return &Shell{
-		services:      services,
-		logsItem:      logsItem,
-		settingsItem:  settingsItem,
-		sidebar:       NewSidebar(NewLogo(assets.Logo()), logsItem, settingsItem),
-		logsPage:      NewLogsPage(invalidate),
-		settingsPage:  settingsPage,
-		dataDirPrompt: &dataDirPrompt{form: newDataDirForm()},
-		startupPrompt: &startupPrompt{},
+		services:        services,
+		logsItem:        logsItem,
+		screenshotsItem: screenshotsItem,
+		settingsItem:    settingsItem,
+		sidebar:         NewSidebar(NewLogo(assets.Logo()), logsItem, screenshotsItem, settingsItem),
+		logsPage:        NewLogsPage(invalidate),
+		screenshotsPage: NewScreenshotsPage(invalidate),
+		settingsPage:    settingsPage,
+		dataDirPrompt:   &dataDirPrompt{form: newDataDirForm()},
+		startupPrompt:   &startupPrompt{},
 	}
 }
 
@@ -89,16 +94,22 @@ func (s *Shell) layoutPage(gtx layout.Context, theme *material.Theme) layout.Dim
 		s.shownItem = selected
 		s.refreshPage(selected)
 	}
-	if selected == s.settingsItem {
+	switch selected {
+	case s.settingsItem:
 		return s.settingsPage.Layout(gtx, theme, s.services)
+	case s.screenshotsItem:
+		return s.screenshotsPage.Layout(gtx, theme, s.services)
 	}
 	return s.logsPage.Layout(gtx, theme, s.services)
 }
 
 // refreshPage reloads what a page shows each time the user opens it.
 func (s *Shell) refreshPage(item *NavItem) {
-	if item == s.logsItem {
+	switch item {
+	case s.logsItem:
 		s.logsPage.Reload(s.services.Logs)
+	case s.screenshotsItem:
+		s.screenshotsPage.Reload(s.services.Screenshots)
 	}
 }
 

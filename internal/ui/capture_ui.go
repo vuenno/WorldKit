@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"image"
 	"log/slog"
 	"os/exec"
 
@@ -13,21 +14,31 @@ import (
 	"world-kit/internal/capture"
 	"world-kit/internal/chatlog"
 	"world-kit/internal/fivem"
+	"world-kit/internal/screenshot"
 	"world-kit/internal/settings"
 )
 
 // Services are the domain services the screens use.
 type Services struct {
-	Capture  CaptureService
-	Settings SettingsStore
-	Logs     LogLibrary
-	Startup  StartupEntry // nil when the startup entry is unavailable
+	Capture     CaptureService
+	Settings    SettingsStore
+	Logs        LogLibrary
+	Screenshots ScreenshotStore
+	Startup     StartupEntry // nil when the startup entry is unavailable
 }
 
 // LogLibrary lists the saved chat sessions and reads their lines.
 type LogLibrary interface {
 	Sessions() ([]chatlog.Session, error)
 	Records(path string) ([]chatlog.Record, error)
+}
+
+// ScreenshotStore saves chat lines as images and lists, reads and deletes the saved ones.
+type ScreenshotStore interface {
+	Save(lines []screenshot.Line) (screenshot.Shot, error)
+	List() ([]screenshot.Shot, error)
+	Load(path string) (image.Image, error)
+	Delete(path string) error
 }
 
 // CaptureService reports chat capture progress and accepts a user-picked FiveM data folder.

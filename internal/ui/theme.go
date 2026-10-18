@@ -68,6 +68,7 @@ const (
 	logoSizeSidebar = unit.Dp(28)
 
 	buttonHeight    = unit.Dp(32)
+	menuItemHeight  = unit.Dp(28) // items in popup menus, inside spacingTiny padding
 	buttonPaddingX  = spacingMedium
 	inputPaddingY   = spacingSmall
 	dialogWidth     = unit.Dp(420)
@@ -76,6 +77,9 @@ const (
 	// characterOptionsMaxHeight shows about three and a half rows of character options, so a
 	// cut-off row hints that the list scrolls.
 	characterOptionsMaxHeight = unit.Dp(132)
+
+	// screenshotPreviewMaxHeight shows about six chat lines of a saved screenshot in its card.
+	screenshotPreviewMaxHeight = unit.Dp(120)
 )
 
 // Sidebar dimensions and motion.

@@ -13,6 +13,7 @@ import (
 	"world-kit/internal/autostart"
 	"world-kit/internal/capture"
 	"world-kit/internal/chatlog"
+	"world-kit/internal/screenshot"
 	"world-kit/internal/settings"
 	"world-kit/internal/ui"
 )
@@ -51,6 +52,7 @@ func run(isMinimized bool) error {
 
 	services := newServices(captureService, store)
 	services.Logs = chatlog.NewLibrary(archiveDir)
+	services.Screenshots = screenshot.NewStore(filepath.Join(dataDir, "screenshots"))
 	return ui.Run(window, services)
 }
 

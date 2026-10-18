@@ -93,6 +93,8 @@ Spacing follows a 4 dp grid.
 | `dialogWidth`    | 420 dp | Max dialog width                      |
 | `contentMaxWidth`| 640 dp | Max width of page content (Settings, Logs list) |
 | `characterOptionsMaxHeight` | 132 dp | Max height of the log filter's character options |
+| `menuItemHeight` | 28 dp  | Items in popup menus (e.g. the selection menu) |
+| `screenshotPreviewMaxHeight` | 120 dp | Max height of a screenshot preview in its card (about six chat lines) |
 
 ## Sidebar (navbar)
 
@@ -195,7 +197,47 @@ separated from content by a 1 dp `colorBorder` line on its right edge.
   caption instead.
 - Copy (button or Ctrl+C) copies the selected lines, or every visible line when none are selected;
   the line-count caption adds "N selected." and "Copied to the clipboard."
+- **Selection menu:** when a selection is made (mouse release, Shift+click or Ctrl+A), a
+  horizontal popup menu appears `spacingTiny` above the first selected line, centered on the
+  pointer (Ctrl+A: the panel's center); with no room above it goes below the last selected
+  line, and it always stays inside the text panel. It follows the lines while scrolling and
+  closes on the next press or when the lines change. Look: `outlinedSurface` in
+  `colorElevatedSurface`, `spacingTiny` padding, items in a row. Item: 13 sp Medium
+  `colorTextPrimary`, `menuItemHeight` tall, `spacingMedium` horizontal padding,
+  `cornerRadius`, `colorBorder` fill on hover, pointer cursor. Code: `selectionMenu`,
+  `menuItem` in `internal/ui/selection_menu.go`. Items today: **Extract**.
+- **Extract** saves the selected lines as a screenshot image (below); the line-count caption
+  adds "Saving screenshot…" then "Screenshot saved to Log Screenshots.", or an error caption.
 - Dates are shown as `Mon 02 Jan 2006, 15:04 UTC`.
+
+## Chat screenshots (extracted images)
+
+What Extract writes: a PNG players lay over game screenshots, styled like the in-game chat.
+
+- Font: **Arial Bold** 14 px, read from `%WINDIR%\Fonts\arialbd.ttf` (bundled Go Bold if
+  that fails).
+- Transparent background, 18 px line height, 6 px padding, each line in its
+  chat color with a 1 px black outline (drawn at the 8 neighboring offsets) so it reads over
+  any picture. Lines longer than 900 px wrap at spaces and keep their color. The image is just
+  big enough for the text. Pixel values (not dp/sp) because they describe the file, not the
+  UI; they live in `internal/screenshot/render.go`.
+
+## Log Screenshots page
+
+- Sidebar item **Log Screenshots** (photo library icon), between Logs and Settings.
+- Page: title, caption "Select lines in a log and choose Extract…", then a scrollable list of
+  cards, `spacingSmall` apart, full page width (images are wide). Newest first.
+- Card: list-row look (`colorSurface` → `colorElevatedSurface` on hover, pointer cursor,
+  `spacingMedium` padding). Top: the image's top part at **1 image px per screen px** (crisp,
+  like the saved file) on a `colorAppBackground` backdrop (`cornerRadius`, `spacingSmall`
+  padding), at most `screenshotPreviewMaxHeight` tall. Below (`spacingSmall`): "Saved
+  `<date>`" (13 sp SemiBold) on the left, "W × H px" caption on the right. Clicking opens it.
+- Open screenshot: header like the log viewer — secondary **Back**, page title "Saved
+  `<date>`" with "W × H px · file name" caption, then secondary **Show in folder** (Explorer
+  with the file selected) and secondary **Delete**. Below (`spacingMedium`): the full image at
+  1:1 on the backdrop, scrolling vertically when taller than the page.
+- Delete asks first in a dialog ("Delete this screenshot?", primary **Delete**, secondary
+  **Cancel**) covering the page area. After deleting, the list shows again.
 
 ## Text fields
 

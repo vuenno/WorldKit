@@ -59,7 +59,7 @@ func (p *LogsPage) Layout(gtx layout.Context, theme *material.Theme, services Se
 	if p.viewer != nil {
 		return p.viewer.Layout(gtx, theme)
 	}
-	p.openClickedSession(gtx, services.Logs)
+	p.openClickedSession(gtx, services)
 	return p.layoutSessionList(gtx, theme, services)
 }
 
@@ -81,10 +81,10 @@ func (p *LogsPage) receiveSessions() {
 	}
 }
 
-func (p *LogsPage) openClickedSession(gtx layout.Context, library LogLibrary) {
+func (p *LogsPage) openClickedSession(gtx layout.Context, services Services) {
 	for index, session := range p.sessions {
 		if p.rowClicks[index].Clicked(gtx) {
-			p.viewer = newLogViewer(session, library, p.invalidate)
+			p.viewer = newLogViewer(session, services.Logs, services.Screenshots, p.invalidate)
 			return
 		}
 	}
