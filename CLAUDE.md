@@ -2,6 +2,22 @@
 
 WorldKit is a small **Windows-only** desktop application written in Go. This file defines how
 code in this repository is written. Follow it for every change. Visual rules live in `DESIGN.md`.
+**Start with `PROJECT_OVERVIEW.md`** for what exists, why, and where things are.
+
+## Keeping the docs current (required)
+
+Every change must leave these three files accurate. Update them **in the same change** as the
+code, whenever the change is worth noting:
+
+| File                  | Update when the change…                                                        |
+|-----------------------|--------------------------------------------------------------------------------|
+| `PROJECT_OVERVIEW.md` | adds/removes a feature, page or package; moves files; makes a key decision; adds a gotcha; completes or adds a next step. Bump its _Last updated_ date. |
+| `DESIGN.md`           | adds or changes a color, size, spacing, typography, animation, component or logo usage. Keep it in sync with `internal/ui/theme.go`. |
+| `CLAUDE.md`           | introduces a new convention, rule, command, tool, dependency or platform constraint. |
+
+- Purely internal refactors with no visible, structural or rule change need no doc update.
+- Edit only what changed. Don't rewrite sections that are still correct.
+- If code and docs disagree, fix the docs in the same change; never leave them stale.
 
 ## Goals (in priority order)
 
@@ -127,3 +143,6 @@ go run github.com/tc-hib/go-winres@v0.3.3 simply --arch amd64 --icon ../../asset
 - [ ] No unused code, no debug prints
 - [ ] New names are self-explanatory without a comment
 - [ ] No new dependency unless justified in the commit message
+- [ ] `PROJECT_OVERVIEW.md`, `DESIGN.md` and `CLAUDE.md` updated where the change requires it
+      (see "Keeping the docs current")
+- [ ] Knowledge graph refreshed after code changes: `graphify update .`
