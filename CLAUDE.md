@@ -159,6 +159,16 @@ go test -race ./...                   # tests
 go mod tidy                           # keep go.mod clean
 ```
 
+**Releasing:** GitHub → Actions → **Release** → Run workflow, enter the version (`0.2.0`, no `v`).
+It runs the checks, builds with that version, packs `installer/worldkit.iss` with Inno Setup 6
+and publishes `WorldKit-Setup-<version>.exe` as release `v<version>` (creating the tag). Never
+hard-code the version: `appVersion` is set with `-ldflags -X` and CI re-stamps the exe resources.
+To try the installer locally (needs Inno Setup 6, after the release build above):
+
+```bash
+iscc /DAppVersion=0.0.0 installer/worldkit.iss
+```
+
 After changing `assets/logo.png`, regenerate the exe icon (run in `cmd/worldkit`):
 
 ```bash

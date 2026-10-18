@@ -1,0 +1,84 @@
+# Builds WorldKit, packs it into an installer and publishes it as a GitHub release.
+# Run it by hand: Actions → Release → Run workflow, then enter the new version (e.g. 0.2.0).
+# The workflow creates the tag v<version> on the chosen branch's latest commit.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without the v (e.g. 0.2.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ inputs.version }}
+      TAG: v${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # Windows runners check out with CRLF, which gofmt reports as unformatted.
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - name: Check version and tag
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version must look like 1.2.3, got '$VERSION'"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Tag $TAG already exists"
+            exit 1
+          fi
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check
+        run: |
+          test -z "$(gofmt -l .)" || { gofmt -l .; echo "::error::gofmt found unformatted files"; exit 1; }
+          go vet ./...
+          go test ./...
+
+      - name: Stamp version into the exe resources
+        working-directory: cmd/worldkit
+        run: >
+          go run github.com/tc-hib/go-winres@v0.3.3 simply --arch amd64
+          --icon ../../assets/logo.png --manifest gui
+          --product-name WorldKit --file-description WorldKit
+          --product-version "$VERSION" --file-version "$VERSION"
+
+      - name: Build
+        run: go build -trimpath -ldflags="-H windowsgui -X world-kit/internal/ui.appVersion=$VERSION" -o bin/worldkit.exe ./cmd/worldkit
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:VERSION" installer\worldkit.iss'
+
+      - name: Publish release
+        run: >
+          gh release create "$TAG" "bin/WorldKit-Setup-$VERSION.exe"
+          --target "$GITHUB_SHA" --title "WorldKit $VERSION" --generate-notes

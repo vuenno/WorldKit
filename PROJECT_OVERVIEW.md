@@ -34,6 +34,7 @@ screenshots, kept on the **Log Screenshots** page.
 | Chat parsing     | Done: `chatlog.Parse` → records with time, kind, speaker, text; `chatlog.Filter`; `chatlog.Summarize` |
 | First-run prompts| Done: FiveM data folder (only if not found; Browse… or type), start with Windows (asked once) |
 | Persistence      | `%AppData%\WorldKit\settings.json`, `%AppData%\WorldKit\logs\YYYY\MM\*.txt`, `%AppData%\WorldKit\screenshots\*.png`, `%AppData%\WorldKit\diagnostics\` (`app.log`, `crash-*.log`) |
+| Releases         | Done: manual **Release** workflow (`.github/workflows/release.yml`) runs the checks, builds with the typed version and publishes an Inno Setup installer under a new `v<version>` tag |
 | Tests            | Animation, chat archive/parser/filter/library/summary, KVS reader, capture service, settings, diagnostics, folder picker setup, screenshot render/store, UI texts (days, durations, counts), filters, chat lines, selection menu placement, icons, gallery layout |
 
 ## Architecture
@@ -129,6 +130,8 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `internal/ui/theme.go`, `fonts.go`     | All design tokens and `NewTheme()`; embedded-font shaper    |
 | `assets/assets.go`, `assets/logo.png`, `assets/fonts/` | Embedded logo (384×384, the only logo source) and Geist/Geist Mono TTFs + `OFL.txt` |
 | `cmd/worldkit/rsrc_windows_amd64.syso` | Generated exe icon + manifest; linked automatically by `go build` |
+| `.github/workflows/release.yml`        | Manual release: checks, versioned build, installer, tag + GitHub release |
+| `installer/worldkit.iss`               | Inno Setup script: per-user install, Start menu entry, uninstall keeps user data |
 | `CLAUDE.md`                            | Code rules, commands, commit checklist                      |
 | `DESIGN.md`                            | Tokens, typography, components and every screen's layout    |
 | `.graphifyignore`, `graphify-out/`     | Knowledge-graph config and output (see below)               |
@@ -217,6 +220,12 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 - **Session list parses every session** to show characters, duration and kinds
   (`chatlog.Summarize`), off the UI goroutine. Fine for hundreds of sessions; cache summaries
   if history grows much larger.
+- **Releases come from a manual workflow, versioned at build time.** The version is typed when
+  the workflow runs; CI stamps it into the exe resources (go-winres) and Settings
+  (`-X world-kit/internal/ui.appVersion`), so nothing is bumped by hand. Local builds show `dev`.
+- **Per-user Inno Setup installer** (`%LocalAppData%\Programs\WorldKit`, no admin prompt),
+  matching the per-user startup entry. Uninstall removes that entry but keeps `%AppData%\WorldKit`
+  (chat logs are irreplaceable).
 
 ## Known gotchas
 

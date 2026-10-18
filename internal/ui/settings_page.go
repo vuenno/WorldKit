@@ -11,9 +11,9 @@ import (
 	"world-kit/internal/capture"
 )
 
-// appVersion is shown at the bottom of Settings; keep it in step with the exe's version
-// resource (see the go-winres command in CLAUDE.md).
-const appVersion = "0.1.0"
+// appVersion is shown at the bottom of Settings. Release builds set it with
+// -ldflags "-X world-kit/internal/ui.appVersion=x.y.z" (.github/workflows/release.yml).
+var appVersion = "dev"
 
 // SettingsPage shows where chat comes from, when WorldKit runs and where its files go.
 type SettingsPage struct {
