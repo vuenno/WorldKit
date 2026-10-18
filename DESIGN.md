@@ -1,0 +1,102 @@
+# WorldKit — Design System
+
+The visual rules for WorldKit. Every token below lives in code in
+`internal/ui/theme.go`; never hard-code a color, size or duration in a layout.
+
+## Principles
+
+- **Small and calm.** Compact controls, small type, plenty of dark space.
+- **One accent.** Orange marks what is active or actionable — nothing else.
+- **Motion with purpose.** Animations are short and eased; they explain a change, never decorate.
+
+## Color tokens
+
+| Token              | Hex       | Code name               | Use                                       |
+|--------------------|-----------|-------------------------|-------------------------------------------|
+| App background     | `#0D0D0F` | `colorAppBackground`    | Window / main content area                |
+| Sidebar / Surface  | `#18181B` | `colorSurface`          | Sidebar, panels, cards                    |
+| Elevated surface   | `#27272A` | `colorElevatedSurface`  | Hovered items, popovers, inputs           |
+| Primary orange     | `#FF6B00` | `colorPrimary`          | Active nav item, primary buttons, focus   |
+| Orange hover       | `#FF8A33` | `colorPrimaryHover`     | Hover state of orange elements            |
+| Primary text       | `#F5F5F5` | `colorTextPrimary`      | Headings, active labels, body text        |
+| Secondary text     | `#A1A1AA` | `colorTextSecondary`    | Inactive labels, hints, icons at rest     |
+| Borders            | `#3F3F46` | `colorBorder`           | Dividers, outlines (1 dp)                 |
+
+Rules:
+- Text on orange uses `colorTextPrimary`.
+- Don't put orange text on `colorElevatedSurface` at body size; use it for icons, bars and fills.
+
+## Typography
+
+Small by default. Sizes in `sp`.
+
+| Role        | Size | Weight   | Color              |
+|-------------|------|----------|--------------------|
+| Page title  | 16   | SemiBold | `colorTextPrimary` |
+| Body        | 13   | Regular  | `colorTextPrimary` |
+| Nav label   | 13   | Medium   | secondary / primary when active |
+| Caption     | 11   | Regular  | `colorTextSecondary` |
+
+## Spacing & sizes
+
+Spacing follows a 4 dp grid.
+
+| Token            | Value  | Use                                   |
+|------------------|--------|---------------------------------------|
+| `spacingTiny`    | 4 dp   | Icon ↔ tight elements                 |
+| `spacingSmall`   | 8 dp   | Gap between nav items, sidebar padding|
+| `spacingMedium`  | 12 dp  | Icon ↔ label, nav item padding        |
+| `spacingLarge`   | 24 dp  | Page padding                          |
+| `iconSize`       | 18 dp  | All icons                             |
+| `navItemHeight`  | 36 dp  | Nav items and the toggle button       |
+| `cornerRadius`   | 6 dp   | Nav items, buttons                    |
+
+## Sidebar (navbar)
+
+Placement: fixed on the **left**, full window height, `colorSurface` background,
+separated from content by a 1 dp `colorBorder` line on its right edge.
+
+### States
+
+| State     | Width  | Shows                 |
+|-----------|--------|-----------------------|
+| Expanded  | 200 dp | Icon + label          |
+| Collapsed | 58 dp  | Icon only, centered (2 × (8 + 12) + 18) |
+
+### Toggle button
+
+- The **very first element** at the top of the sidebar.
+- A menu icon (`☰`) in `colorTextSecondary`; hover → `colorElevatedSurface` background, icon `colorTextPrimary`.
+- Click switches between expanded and collapsed. Clicking mid-animation reverses smoothly from the current width.
+- Below it, a 1 dp `colorBorder` divider separates it from the navigation items.
+
+### Navigation items
+
+- Stacked **vertically**, top-aligned, with an **8 dp gap** (`spacingSmall`) between items.
+- Each item: `navItemHeight` tall, `cornerRadius` corners, `spacingMedium` horizontal padding,
+  icon (`iconSize`) then label (13 sp) separated by `spacingMedium`.
+- States:
+  - **Rest:** transparent background, icon + label `colorTextSecondary`.
+  - **Hover:** `colorElevatedSurface` background, icon + label `colorTextPrimary`.
+  - **Active:** `colorElevatedSurface` background, icon `colorPrimary`, label `colorTextPrimary`,
+    plus a 3 dp `colorPrimary` indicator bar on the item's left edge.
+- Collapsed: labels are hidden (faded out and clipped); icons stay at the same position so they
+  don't jump during the animation.
+
+### Animation
+
+| Property   | Value                                  |
+|------------|----------------------------------------|
+| Duration   | **200 ms**                             |
+| Easing     | Ease-in-out cubic                      |
+| Animates   | Sidebar width; label opacity (0 ↔ 1)   |
+
+- Width interpolates between collapsed and expanded widths each frame; content area resizes with it.
+- Label opacity follows the same eased progress, so labels fade as the bar narrows.
+- Driven by `gtx.Now` and `op.InvalidateCmd` — only redraw while animating, never on idle.
+
+## Buttons
+
+- Height 32 dp, `cornerRadius` corners, label 13 sp, horizontal padding 12 dp.
+- **Primary:** `colorPrimary` fill → `colorPrimaryHover` on hover, `colorTextPrimary` text.
+- **Secondary:** `colorElevatedSurface` fill, 1 dp `colorBorder`, `colorTextPrimary` text.
