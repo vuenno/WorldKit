@@ -54,7 +54,7 @@ Two embedded typefaces (`assets/fonts`, OFL-1.1), loaded by `newShaper` in
 - **Geist** (`fontUI`): every label, title, button and chat line. Weights 400/500/600/700.
 - **Geist Mono** (`fontMono`): times, counts, sizes and paths — anything people compare
   digit by digit. Weights 400/500.
-- **Arial Bold** only in extracted screenshot images (see Chat screenshots).
+- **Arial Bold** (and Bold Italic) only in extracted screenshot images (see Chat screenshots).
 
 | Role          | Token                 | Size | Weight   | Color                 |
 |---------------|-----------------------|------|----------|-----------------------|
@@ -117,6 +117,19 @@ single-accent rule; use them only for chat text (and the session list's kind bar
 | PMs                    | `#FBF724` | `colorChatPM`      |
 | Session start header   | `#939799` | `colorChatHeader`  |
 
+The extract dialog's color picker (`textSwatches`) offers these chat colors (say, low, /me,
+whisper, PM) plus the in-game color codes as the Magician draws them: red `#F00000`
+(`colorChatRed`), green `#56D64B` (`colorChatGreen`), blue `#3896F3` (`colorChatBlue`), cyan
+`#33C1C9` (`colorChatCyan`), pink `#FF00BC` (`colorChatPink`).
+
+### Screenshot backdrops
+
+| Token                | Hex       | Use                                                      |
+|----------------------|-----------|----------------------------------------------------------|
+| `colorBackdropDark`  | `#000000` | Dark: box behind each row of text (the Magician's black)  |
+| `colorBackdropLight` | `#D9DCE1` | Light: box behind each row of text                       |
+| `colorCheckerLight` / `colorCheckerDark` | `#22252C` / `#1B1D23` | Checkerboard under every preview: "transparent" |
+
 ## Spacing, radii & sizes
 
 Spacing follows a 4 dp grid: `spacingTiny` 4, `spacingSmall` 8, `spacingMedium` 12,
@@ -142,6 +155,9 @@ Spacing follows a 4 dp grid: `spacingTiny` 4, `spacingSmall` 8, `spacingMedium` 
 | `contentMaxWidth`       | 960 dp | Logs list                             |
 | `settingsMaxWidth`      | 720 dp | Settings                              |
 | `dialogWidth`           | 440 dp | Max dialog width                      |
+| `extractDialogWidth`    | 720 dp | Max width of the Extract image dialog |
+| `swatchSize`            | 22 dp  | Color swatches (`swatchRingWidth` 2 dp hover ring) |
+| `caretWidth`            | 1 dp   | The caret in the picture editor       |
 
 ## Icons
 
@@ -173,8 +189,13 @@ Line icons on a 24-unit grid with 1.8-unit rounded strokes (`strokeIcon`,
   `radiusFloating` and a soft shadow; menus and toasts.
 - **Toast** (`toast`): floating, bottom-right of its area, check icon in `colorLive` (or ×
   in `colorDanger`), 13 sp message, optional link; hides after `toastDuration` (4 s).
-- **Dialog** (`dialog`): `colorScrim` over the window, centered card ≤ `dialogWidth`:
-  screen title, secondary body text, 24 dp, controls (primary/danger first).
+- **Dialog** (`dialog`): `colorScrim` over the window, centered card ≤ `dialogWidth` (or
+  its `width`): screen title, secondary body text, 24 dp, controls (primary/danger first).
+- **Color swatch** (`layoutSwatch`): a 22 dp dot in its color; hovered, a 2 dp
+  `colorTextPrimary` ring. Clicking applies the color; swatches have no selected state.
+- **Picture editor** (`pictureEditor`): text edited on a rendered image. Text cursor over
+  the whole preview; selection `colorPrimary` at `selectionOpacity` behind the glyphs;
+  caret `caretWidth` (1 dp) `colorTextPrimary`, shown while focused, not blinking.
 
 ## Sidebar
 
@@ -236,17 +257,49 @@ Fixed on the left, full height, `colorSidebar`, 1 dp `colorDivider` on its right
 - Toasts in the panel's bottom-right: "Copied 4 lines"; "Screenshot saved · **View**" (opens
   it in Log Screenshots); errors with a red ×.
 
+## Extract image dialog
+
+Opened by **Extract image** (`extractDialog`, `internal/ui/extract_dialog.go`); a `dialog`
+up to `extractDialogWidth` (720 dp) over the log viewer.
+
+- Title "Extract image"; message "Save 4 lines as they are, or edit them first?" (while
+  editing: "Select text on the image, then pick Italic or a color. Click and type to change
+  the text."; with every line emptied: "Every line is empty. Click the image and type to
+  save something.").
+- While editing, first: a row of secondary **Italic** (italic icon, 32 dp), a vertical
+  divider, the color swatches 4 dp apart and ghost **Default** (back to the automatic
+  colors), then a caption (Ctrl+A, nothing selected = all text, Ctrl+Z), 12 dp above the
+  preview.
+- **Preview**: rounded `radiusCard` checkerboard, at least `screenshotPreviewHeight`
+  (140 dp) tall, 16 dp padding, the rendered PNG centered at 1:1 (scaled down to fit when
+  wider); redrawn in the background on every change. "Drawing…" before the first preview.
+  While editing it is a **picture editor**: drag, Shift+click or Ctrl+A select text on the
+  image; click places the caret; typing, Backspace, Delete, Enter (new line), arrows,
+  Home/End (Shift extends) and Ctrl+Z work as in a text field.
+- 12 dp below: "Background" + segmented **Transparent · Dark · Light** + caption "Dark and
+  Light put a box behind each line." (one line). The choice stays for the next extract.
+- The body scrolls; the buttons stay in view 24 dp below it: primary **Save image** (image
+  icon), secondary **Edit** (pencil icon; hidden once editing), secondary **Cancel**.
+- Italic, colors and Default act on the selection, or on all the text with nothing
+  selected. Italic makes the selection italic, or upright when all of it already is.
+
 ## Chat screenshots (extracted images)
 
 What Extract image writes: a PNG players lay over game screenshots, styled like the in-game chat.
 
-- Font: **Arial Bold** 14 px, read from `%WINDIR%\Fonts\arialbd.ttf` (bundled Go Bold if
-  that fails).
-- Transparent background, 18 px line height, 6 px padding, each line in its
-  chat color with a 1 px black outline (drawn at the 8 neighboring offsets) so it reads over
-  any picture. Lines longer than 900 px wrap at spaces and keep their color. The image is just
-  big enough for the text. Pixel values (not dp/sp) because they describe the file, not the
-  UI; they live in `internal/screenshot/render.go`.
+- Font: **Arial Bold** 14 px, read from `%WINDIR%\Fonts\arialbd.ttf`; italic text uses
+  **Arial Bold Italic** (`arialbi.ttf`). Bundled Go Bold / Go Bold Italic if those fail.
+- 18 px line height, 6 px padding, each line in its chat color with a 1 px black outline
+  (drawn at the 8 neighboring offsets) so it reads over any picture. Lines longer than
+  900 px wrap at spaces and keep their colors. The image is just big enough for the text.
+  Pixel values (not dp/sp) because they describe the file, not the UI; they live in
+  `internal/screenshot/render.go`.
+- **Markup** in a chat line: `/text/` → italic, slashes removed; `*text*` → the /me color
+  (`colorChatEmote`), asterisks removed. Markers count only at word edges (`and/or`,
+  `2 * 3` and a /me line's leading `* ` stay as typed).
+- **Backdrop**: Transparent draws nothing behind the text. Dark/Light draw one box per
+  drawn row: the row's 18 px height, from 5 px left of its text to 5 px right of it, rows
+  flush (a stepped shape for uneven lines), everything else transparent.
 
 ## Log Screenshots page
 
@@ -260,8 +313,9 @@ What Extract image writes: a PNG players lay over game screenshots, styled like 
   while hovered, ghost icon buttons Show in folder and Delete (danger).
 - **Open screenshot** (`screenshotView`): back; screen title "Saved today, 14:18 UTC" over the
   size; primary **Show in folder**, danger icon button **Delete**. Below: the preview
-  (rounded, fills the space, image centered at 1:1, scrolls when taller) with
-  "Background: Transparent · Dark · Light" under it; a **Details** card (Saved, Size, File,
+  (rounded checkerboard, fills the space, image centered at 1:1, scrolls when taller) with
+  "Background: Transparent · Dark · Light" under it: Dark/Light preview the boxes behind
+  each row of text, as Extract draws them, not a fill; a **Details** card (Saved, Size, File,
   and a tip) at the right, 300 dp wide or 2/5 of the row on narrow windows.
 - Delete always asks: dialog "Delete this screenshot?" / "The image file is removed from your
   computer for good." with danger **Delete** and **Cancel**.

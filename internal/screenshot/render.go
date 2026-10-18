@@ -4,24 +4,23 @@ package screenshot
 
 import (
 	"errors"
-	"fmt"
 	"image"
 	"image/color"
-	"log/slog"
-	"os"
-	"path/filepath"
-	"strings"
+	"image/draw"
 
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/gofont/gobold"
-	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
 )
 
-// Line is one chat line to draw, in its in-game color.
+// Line is one chat line to draw, as styled spans (see NewLine for chat text with markup).
 type Line struct {
-	Text  string
-	Color color.NRGBA
+	Spans []Span
+	Color color.NRGBA // the line's own chat color
+}
+
+// Style is how a whole screenshot is drawn, beyond its characters' own styles.
+type Style struct {
+	Backdrop color.NRGBA // the box behind each row of text; zero (transparent): no box
 }
 
 // The look follows the in-game chat: bold text with a black outline on a transparent
@@ -32,6 +31,10 @@ const (
 	paddingPx      = 6
 	outlinePx      = 1
 	maxTextWidthPx = 900 // longer lines wrap, like the in-game chat box
+	// backdropPaddingPx is how far a backdrop box reaches past its row's text on the left
+	// and right, as in the Chatlog Magician (padding 0 5px).
+	backdropPaddingPx = 5
+	marginPx          = paddingPx + outlinePx // from the image edge to the text
 )
 
 var outlineColor = color.NRGBA{A: 0xFF}
@@ -40,117 +43,110 @@ var outlineColor = color.NRGBA{A: 0xFF}
 var ErrNoLines = errors.New("no lines to draw")
 
 // Render draws lines top to bottom, wrapping long ones, on a transparent image just big
-// enough to hold them.
-func Render(lines []Line) (*image.RGBA, error) {
+// enough to hold them. With a backdrop, each row gets a box hugging its text. The picture
+// also records where each character landed, for editing on the image.
+func Render(lines []Line, style Style) (*Picture, error) {
 	if len(lines) == 0 {
 		return nil, ErrNoLines
 	}
-	face, err := newFace()
+	faces, err := newFaces()
 	if err != nil {
 		return nil, err
 	}
-	defer face.Close()
+	defer faces.Close()
 
-	rows := wrapLines(face, lines, maxTextWidthPx)
+	rows := layoutRows(faces, lines)
 	width := 0
 	for _, row := range rows {
-		width = max(width, font.MeasureString(face, row.Text).Ceil())
+		width = max(width, row.width)
 	}
-	margin := paddingPx + outlinePx
-	canvas := image.NewRGBA(image.Rect(0, 0, width+2*margin, len(rows)*lineHeightPx+2*margin))
-	baselineOffset := (lineHeightPx + face.Metrics().CapHeight.Ceil()) / 2
+	canvas := image.NewRGBA(image.Rect(0, 0, width+2*marginPx, len(rows)*lineHeightPx+2*marginPx))
+	if style.Backdrop.A > 0 {
+		drawBackdrop(canvas, rows, style.Backdrop)
+	}
+	baselineOffset := (lineHeightPx + faces.regular.Metrics().CapHeight.Ceil()) / 2
 	for index, row := range rows {
-		origin := fixed.P(margin, margin+index*lineHeightPx+baselineOffset)
-		drawOutlinedText(canvas, face, row, origin)
+		origin := fixed.P(marginPx, marginPx+index*lineHeightPx+baselineOffset)
+		drawOutlinedRow(canvas, faces, row, origin)
 	}
-	return canvas, nil
+	return &Picture{Image: canvas, rows: rows}, nil
 }
 
-func newFace() (font.Face, error) {
-	face, err := opentype.NewFace(loadFont(), &opentype.FaceOptions{Size: fontSizePx, DPI: 72, Hinting: font.HintingFull})
-	if err != nil {
-		return nil, fmt.Errorf("create screenshot font face: %w", err)
+// drawBackdrop fills one box per row with text, each as wide as that row's text plus
+// padding. Rows sit flush, so a block of lines reads as one stepped shape, like the
+// Chatlog Magician's per-line background.
+func drawBackdrop(canvas *image.RGBA, rows []textRow, backdrop color.NRGBA) {
+	fill := image.NewUniform(backdrop)
+	for index, row := range rows {
+		if len(row.chars) > 0 {
+			draw.Draw(canvas, rowBox(index, row.width), fill, image.Point{}, draw.Src)
+		}
 	}
-	return face, nil
 }
 
-// loadFont returns Arial Bold, the font the in-game chat look uses. Its license doesn't
-// allow bundling it, but every Windows install has it, so it is read from the Windows fonts
-// folder. If that fails, the bundled Go Bold keeps Extract working.
-func loadFont() *opentype.Font {
-	path := filepath.Join(windowsDir(), "Fonts", "arialbd.ttf")
-	parsed, err := parseFontFile(path)
-	if err == nil {
-		return parsed
-	}
-	slog.Warn("load screenshot font, using Go Bold instead", "path", path, "error", err)
-	parsed, err = opentype.Parse(gobold.TTF)
-	if err != nil {
-		panic(fmt.Sprintf("parse bundled Go Bold font: %v", err)) // the bundled font is always valid
-	}
-	return parsed
+// rowBox is the backdrop box of the row at index whose text is width pixels wide.
+func rowBox(index, width int) image.Rectangle {
+	top := marginPx + index*lineHeightPx
+	return image.Rect(marginPx-backdropPaddingPx, top, marginPx+width+backdropPaddingPx, top+lineHeightPx)
 }
 
-func parseFontFile(path string) (*opentype.Font, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read font: %w", err)
+// RowBoxes finds the backdrop boxes of an image Render drew: one per row that has text,
+// placed as Render places them. It lets a viewer show a backdrop behind screenshots saved
+// without one.
+func RowBoxes(img image.Image) []image.Rectangle {
+	bounds := img.Bounds()
+	var boxes []image.Rectangle
+	for top := bounds.Min.Y + marginPx; top+lineHeightPx <= bounds.Max.Y-marginPx; top += lineHeightPx {
+		left, right, hasInk := inkRange(img, top, top+lineHeightPx)
+		if !hasInk {
+			continue
+		}
+		// The ink includes the outline, which reaches outlinePx past the text.
+		box := image.Rect(left+outlinePx-backdropPaddingPx, top, right-outlinePx+backdropPaddingPx, top+lineHeightPx)
+		boxes = append(boxes, box.Intersect(bounds))
 	}
-	parsed, err := opentype.Parse(data)
-	if err != nil {
-		return nil, fmt.Errorf("parse font: %w", err)
-	}
-	return parsed, nil
+	return boxes
 }
 
-func windowsDir() string {
-	if dir := os.Getenv("WINDIR"); dir != "" {
-		return dir
+// inkRange returns the leftmost and one-past-rightmost x of non-transparent pixels in the
+// rows top..bottom.
+func inkRange(img image.Image, top, bottom int) (left, right int, hasInk bool) {
+	bounds := img.Bounds()
+	left, right = bounds.Max.X, bounds.Min.X
+	for y := top; y < bottom; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			if _, _, _, alpha := img.At(x, y).RGBA(); alpha == 0 {
+				continue
+			}
+			left, right = min(left, x), max(right, x+1)
+		}
 	}
-	return `C:\Windows`
+	return left, right, left < right
 }
 
-// drawOutlinedText draws the text in black at every neighboring offset, then in its own
-// color on top.
-func drawOutlinedText(canvas *image.RGBA, face font.Face, line Line, origin fixed.Point26_6) {
-	outline := &font.Drawer{Dst: canvas, Src: image.NewUniform(outlineColor), Face: face}
+// drawOutlinedRow draws the row in black at every neighboring offset, then in its own
+// colors on top.
+func drawOutlinedRow(canvas *image.RGBA, faces *faces, row textRow, origin fixed.Point26_6) {
 	for dy := -outlinePx; dy <= outlinePx; dy++ {
 		for dx := -outlinePx; dx <= outlinePx; dx++ {
 			if dx == 0 && dy == 0 {
 				continue
 			}
-			outline.Dot = origin.Add(fixed.P(dx, dy))
-			outline.DrawString(line.Text)
+			drawRow(canvas, faces, row, origin.Add(fixed.P(dx, dy)), func(Char) color.NRGBA { return outlineColor })
 		}
 	}
-	text := &font.Drawer{Dst: canvas, Src: image.NewUniform(line.Color), Face: face, Dot: origin}
-	text.DrawString(line.Text)
+	drawRow(canvas, faces, row, origin, func(c Char) color.NRGBA { return c.Color })
 }
 
-// wrapLines splits lines wider than maxWidth at spaces; each piece keeps its line's color.
-// A single word wider than maxWidth stays on its own row rather than being cut.
-func wrapLines(face font.Face, lines []Line, maxWidth int) []Line {
-	var rows []Line
-	for _, line := range lines {
-		for _, text := range wrapText(face, line.Text, maxWidth) {
-			rows = append(rows, Line{Text: text, Color: line.Color})
+// drawRow draws each of the row's characters at its place, in colorOf(char).
+func drawRow(canvas *image.RGBA, faces *faces, row textRow, origin fixed.Point26_6, colorOf func(Char) color.NRGBA) {
+	for _, placed := range row.chars {
+		drawer := &font.Drawer{
+			Dst:  canvas,
+			Src:  image.NewUniform(colorOf(placed.char)),
+			Face: faces.of(placed.char.IsItalic),
+			Dot:  origin.Add(fixed.Point26_6{X: placed.x}),
 		}
+		drawer.DrawString(string(placed.char.R))
 	}
-	return rows
-}
-
-func wrapText(face font.Face, text string, maxWidth int) []string {
-	words := strings.Split(text, " ")
-	var rows []string
-	current := words[0]
-	for _, word := range words[1:] {
-		candidate := current + " " + word
-		if font.MeasureString(face, candidate).Ceil() <= maxWidth {
-			current = candidate
-			continue
-		}
-		rows = append(rows, current)
-		current = word
-	}
-	return append(rows, current)
 }

@@ -45,7 +45,7 @@ type LogLibrary interface {
 
 // ScreenshotStore saves chat lines as images and lists, reads and deletes the saved ones.
 type ScreenshotStore interface {
-	Save(lines []screenshot.Line) (screenshot.Shot, error)
+	Save(lines []screenshot.Line, style screenshot.Style) (screenshot.Shot, error)
 	List() ([]screenshot.Shot, error)
 	Load(path string) (image.Image, error)
 	Delete(path string) error

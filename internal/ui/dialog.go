@@ -16,6 +16,7 @@ import (
 // so nothing behind the dialog can be used until it closes.
 type dialog struct {
 	scrim widget.Clickable
+	width unit.Dp // the most the card may take; zero: dialogWidth
 }
 
 func (d *dialog) Layout(gtx layout.Context, theme *material.Theme, title, message string, content layout.Widget) layout.Dimensions {
@@ -25,7 +26,11 @@ func (d *dialog) Layout(gtx layout.Context, theme *material.Theme, title, messag
 		return layout.Dimensions{Size: size}
 	})
 	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, gtx.Dp(dialogWidth))
+		width := d.width
+		if width == 0 {
+			width = dialogWidth
+		}
+		gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, gtx.Dp(width))
 		gtx.Constraints.Min.X = gtx.Constraints.Max.X
 		return card(gtx, spacingXLarge, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,

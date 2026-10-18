@@ -39,9 +39,9 @@ func NewStore(dir string) *Store {
 	return &Store{dir: dir}
 }
 
-// Save renders lines and writes them to a new PNG file named after the current time.
-func (s *Store) Save(lines []Line) (Shot, error) {
-	img, err := Render(lines)
+// Save renders lines in style and writes them to a new PNG file named after the current time.
+func (s *Store) Save(lines []Line, style Style) (Shot, error) {
+	picture, err := Render(lines, style)
 	if err != nil {
 		return Shot{}, err
 	}
@@ -53,7 +53,7 @@ func (s *Store) Save(lines []Line) (Shot, error) {
 	if err != nil {
 		return Shot{}, err
 	}
-	if err := writePNG(path, img); err != nil {
+	if err := writePNG(path, picture.Image); err != nil {
 		return Shot{}, err
 	}
 	return Shot{Path: path, Saved: saved}, nil

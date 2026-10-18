@@ -23,7 +23,9 @@ type loadedShot struct {
 	shot  screenshot.Shot
 	image paint.ImageOp
 	size  image.Point
-	err   error // why the image couldn't be read; the shot is still listed so it can be deleted
+	// rowBoxes are where a backdrop box goes behind each row of text (screenshot.RowBoxes).
+	rowBoxes []image.Rectangle
+	err      error // why the image couldn't be read; the shot is still listed so it can be deleted
 }
 
 // loadShots lists the store's screenshots and decodes each one.
@@ -43,6 +45,7 @@ func loadShots(store ScreenshotStore) ([]loadedShot, error) {
 		}
 		loaded[i].image = paint.NewImageOp(img)
 		loaded[i].size = img.Bounds().Size()
+		loaded[i].rowBoxes = screenshot.RowBoxes(img)
 	}
 	return loaded, nil
 }
