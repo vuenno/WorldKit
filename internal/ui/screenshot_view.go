@@ -1,11 +1,15 @@
 package ui
 
 import (
+	"image"
 	"log/slog"
 	"os/exec"
 	"path/filepath"
 
+	"gioui.org/font"
 	"gioui.org/layout"
+	"gioui.org/op/clip"
+	"gioui.org/op/paint"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 )
@@ -14,147 +18,262 @@ import (
 type viewOutcome int
 
 const (
-	viewOpen    viewOutcome = iota
-	viewClosed              // Back was clicked
-	viewDeleted             // the screenshot was deleted
+	viewOpen            viewOutcome = iota
+	viewClosed                      // Back was clicked
+	viewDeleteRequested             // Delete was clicked; the page asks for confirmation
 )
 
-// screenshotView shows one screenshot in full, with Show in folder and Delete. Deleting asks
-// for confirmation first, since the file is removed for good.
+// Preview backdrops: transparent shows the checkerboard; dark and light show how the text
+// reads over night and day scenes.
+const (
+	backdropTransparent = iota
+	backdropDark
+	backdropLight
+)
+
+// screenshotView shows one screenshot in full at its real pixel size, with its details,
+// Show in folder and Delete.
 type screenshotView struct {
-	shot               loadedShot
-	store              ScreenshotStore
-	back               widget.Clickable
-	showInFolder       widget.Clickable
-	delete             widget.Clickable
-	isConfirmingDelete bool
-	confirmDialog      dialog
-	confirmDelete      widget.Clickable
-	cancelDelete       widget.Clickable
-	deleter            *backgroundLoad[struct{}]
-	errorText          string
-	list               widget.List
+	shot         loadedShot
+	back         widget.Clickable
+	showInFolder widget.Clickable
+	delete       widget.Clickable
+	backdrop     *segmentedControl
+	list         widget.List
 }
 
-func newScreenshotView(shot loadedShot, store ScreenshotStore, invalidate func()) *screenshotView {
+func newScreenshotView(shot loadedShot) *screenshotView {
 	return &screenshotView{
-		shot:    shot,
-		store:   store,
-		deleter: newBackgroundLoad[struct{}](invalidate),
-		list:    widget.List{List: layout.List{Axis: layout.Vertical}},
+		shot:     shot,
+		backdrop: newSegmentedControl("Transparent", "Dark", "Light"),
+		list:     widget.List{List: layout.List{Axis: layout.Vertical}},
 	}
 }
 
-// Update handles the view's buttons and reports whether it should close.
+// Update handles the view's buttons.
 func (v *screenshotView) Update(gtx layout.Context) viewOutcome {
-	if isDeleted := v.receiveDeleteResult(); isDeleted {
-		return viewDeleted
-	}
-	if v.back.Clicked(gtx) {
-		return viewClosed
-	}
+	v.backdrop.Update(gtx)
 	if v.showInFolder.Clicked(gtx) {
 		revealFile(v.shot.shot.Path)
 	}
 	if v.delete.Clicked(gtx) {
-		v.isConfirmingDelete = true
+		return viewDeleteRequested
 	}
-	if v.cancelDelete.Clicked(gtx) {
-		v.isConfirmingDelete = false
-	}
-	if v.confirmDelete.Clicked(gtx) && !v.deleter.IsLoading() {
-		v.errorText = ""
-		path := v.shot.shot.Path
-		v.deleter.Start(func() (struct{}, error) { return struct{}{}, v.store.Delete(path) })
+	if v.back.Clicked(gtx) {
+		return viewClosed
 	}
 	return viewOpen
 }
 
-func (v *screenshotView) receiveDeleteResult() bool {
-	result, ok := v.deleter.Result()
-	if !ok {
-		return false
-	}
-	v.isConfirmingDelete = false
-	if result.err != nil {
-		slog.Error("delete chat screenshot", "path", v.shot.shot.Path, "error", result.err)
-		v.errorText = "Couldn't delete this screenshot."
-		return false
-	}
-	return true
-}
-
-// Layout draws the header, the image and, while deleting, the confirmation dialog.
+// Layout draws the header, then the preview beside the details card.
 func (v *screenshotView) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensions {
-	dims := layout.UniformInset(spacingLarge).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	inset := layout.Inset{Left: spacingPage, Right: spacingPage, Top: spacingSmall, Bottom: spacingXLarge}
+	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return v.layoutHeader(gtx, theme) }),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return errorCaption(gtx, theme, v.errorText)
+			layout.Rigid(layout.Spacer{Height: spacingXLarge - spacingTiny}.Layout),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				row := layout.Flex{Axis: layout.Horizontal}
+				return row.Layout(gtx,
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return v.layoutPreview(gtx, theme) }),
+					layout.Rigid(layout.Spacer{Width: spacingXLarge - spacingTiny}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						// Narrow windows give the preview and its controls room first.
+						gtx.Constraints.Max.X = min(gtx.Dp(screenshotDetailsWidth), gtx.Constraints.Max.X*2/5)
+						return v.layoutDetails(gtx, theme)
+					}),
+				)
 			}),
-			layout.Rigid(layout.Spacer{Height: spacingMedium}.Layout),
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return v.layoutImage(gtx, theme) }),
 		)
 	})
-	if v.isConfirmingDelete {
-		v.layoutConfirmDialog(gtx, theme)
-	}
-	return dims
 }
 
 func (v *screenshotView) layoutHeader(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}
 	return row.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return secondaryButton(&v.back, "Back").Layout(gtx, theme)
+			return iconButton(&v.back, iconArrowLeft).Layout(gtx, theme)
 		}),
-		layout.Rigid(layout.Spacer{Width: spacingMedium}.Layout),
+		layout.Rigid(layout.Spacer{Width: spacingLarge}.Layout),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			details := shotSizeText(v.shot) + " · " + filepath.Base(v.shot.shot.Path)
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(pageTitle(theme, shotSavedText(v.shot.shot)).Layout),
-				layout.Rigid(caption(theme, details).Layout),
+				layout.Rigid(screenTitle(theme, savedText(v.shot.shot.Saved, gtx.Now)).Layout),
+				layout.Rigid(layout.Spacer{Height: spacingTiny}.Layout),
+				layout.Rigid(secondaryText(theme, shotSizeText(v.shot)).Layout),
 			)
 		}),
-		layout.Rigid(layout.Spacer{Width: spacingMedium}.Layout),
+		layout.Rigid(layout.Spacer{Width: spacingLarge}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return secondaryButton(&v.showInFolder, "Show in folder").Layout(gtx, theme)
+			return primaryButton(&v.showInFolder, "Show in folder").withIcon(iconFolder).Layout(gtx, theme)
 		}),
 		layout.Rigid(layout.Spacer{Width: spacingSmall}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return secondaryButton(&v.delete, "Delete").Layout(gtx, theme)
+			return iconButton(&v.delete, iconTrash).asDanger().Layout(gtx, theme)
 		}),
 	)
 }
 
-// layoutImage draws the screenshot at its real pixel size, scrolling when it is taller
-// than the page.
-func (v *screenshotView) layoutImage(gtx layout.Context, theme *material.Theme) layout.Dimensions {
-	if v.shot.err != nil {
-		return caption(theme, "Couldn't read this screenshot. You can still delete it.").Layout(gtx)
+// layoutPreview draws the image centered on the chosen backdrop, scrolling when it is
+// taller than the page, with the backdrop switch below.
+func (v *screenshotView) layoutPreview(gtx layout.Context, theme *material.Theme) layout.Dimensions {
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min = gtx.Constraints.Max
+			size := gtx.Constraints.Max
+			shape := clip.UniformRRect(image.Rectangle{Max: size}, gtx.Dp(radiusCard))
+			defer shape.Push(gtx.Ops).Pop()
+			v.drawBackdrop(gtx, size)
+			if v.shot.err != nil {
+				return layout.Center.Layout(gtx, secondaryText(theme, "Couldn't read this screenshot. You can still delete it.").Layout)
+			}
+			return styledList(theme, &v.list).Layout(gtx, 1, func(gtx layout.Context, _ int) layout.Dimensions {
+				gtx.Constraints.Min = image.Pt(gtx.Constraints.Max.X, max(size.Y, v.shot.size.Y))
+				return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layoutImageAtPixelSize(gtx, v.shot.image, v.shot.size)
+				})
+			})
+		}),
+		layout.Rigid(layout.Spacer{Height: spacingMedium}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}
+			return row.Layout(gtx,
+				layout.Rigid(secondaryText(theme, "Background").Layout),
+				layout.Rigid(layout.Spacer{Width: spacingMedium - spacingTiny/2}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return v.backdrop.Layout(gtx, theme) }),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					return layout.Dimensions{Size: image.Pt(gtx.Constraints.Min.X, 0)}
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					// One line, cut off when there's no room: wrapped, it grew tall enough to
+					// squeeze the preview above.
+					label := caption(theme, "Shown at actual size")
+					label.MaxLines = 1
+					return label.Layout(gtx)
+				}),
+			)
+		}),
+	)
+}
+
+func (v *screenshotView) drawBackdrop(gtx layout.Context, size image.Point) {
+	switch v.backdrop.selected {
+	case backdropDark:
+		paint.Fill(gtx.Ops, colorBackdropDark)
+	case backdropLight:
+		paint.Fill(gtx.Ops, colorBackdropLight)
+	default:
+		drawChecker(gtx, size)
 	}
-	list := material.List(theme, &v.list)
-	list.Indicator.Color = colorBorder
-	list.Indicator.HoverColor = colorTextSecondary
-	return list.Layout(gtx, 1, func(gtx layout.Context, _ int) layout.Dimensions {
-		return shotBackdrop(gtx, func(gtx layout.Context) layout.Dimensions {
-			return layoutImageAtPixelSize(gtx, v.shot.image, v.shot.size)
-		})
+}
+
+func (v *screenshotView) layoutDetails(gtx layout.Context, theme *material.Theme) layout.Dimensions {
+	gtx.Constraints.Min = image.Pt(gtx.Constraints.Max.X, 0)
+	rows := [][2]string{
+		{"Saved", v.shot.shot.Saved.UTC().Format(fullLayout)},
+		{"Size", shotSizeText(v.shot)},
+		{"File", filepath.Base(v.shot.shot.Path)},
+	}
+	return card(gtx, spacingXLarge-spacingTiny, func(gtx layout.Context) layout.Dimensions {
+		children := []layout.FlexChild{
+			layout.Rigid(styledLabel(theme, textSizeBody, font.SemiBold, colorTextPrimary, "Details").Layout),
+		}
+		for _, row := range rows {
+			children = append(children,
+				layout.Rigid(layout.Spacer{Height: spacingMedium}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return detailRow(gtx, theme, row[0], row[1]) }),
+			)
+		}
+		children = append(children,
+			layout.Rigid(layout.Spacer{Height: spacingLarge}.Layout),
+			layout.Rigid(horizontalDivider),
+			layout.Rigid(layout.Spacer{Height: spacingLarge}.Layout),
+			layout.Rigid(caption(theme, "Paste it over a screenshot in any editor. The black outline keeps the text readable on bright scenes.").Layout),
+		)
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	})
 }
 
-func (v *screenshotView) layoutConfirmDialog(gtx layout.Context, theme *material.Theme) {
-	v.confirmDialog.Layout(gtx, theme, "Delete this screenshot?",
+// detailRow is a label/value pair in a details card.
+func detailRow(gtx layout.Context, theme *material.Theme, label, value string) layout.Dimensions {
+	row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Baseline}
+	return row.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min.X = gtx.Dp(detailLabelWidth)
+			return secondaryText(theme, label).Layout(gtx)
+		}),
+		layout.Flexed(1, styledLabel(theme, textSizeSmall, font.Normal, colorTextPrimary, value).Layout),
+	)
+}
+
+func horizontalDivider(gtx layout.Context) layout.Dimensions {
+	size := image.Pt(gtx.Constraints.Max.X, gtx.Dp(borderWidth))
+	paint.FillShape(gtx.Ops, colorDivider, clip.Rect{Max: size}.Op())
+	return layout.Dimensions{Size: size}
+}
+
+// shotDeletion asks before deleting a screenshot, then deletes it off the UI goroutine.
+// The file is removed for good, so the dialog names that plainly.
+type shotDeletion struct {
+	path    string // the screenshot being asked about; "" when no dialog is up
+	dialog  dialog
+	confirm widget.Clickable
+	cancel  widget.Clickable
+	deleter *backgroundLoad[struct{}]
+	errText string
+}
+
+func newShotDeletion(invalidate func()) shotDeletion {
+	return shotDeletion{deleter: newBackgroundLoad[struct{}](invalidate)}
+}
+
+// Ask shows the confirmation for the screenshot at path.
+func (d *shotDeletion) Ask(path string) {
+	d.path = path
+	d.errText = ""
+}
+
+// Update handles the dialog and reports whether a screenshot was deleted.
+func (d *shotDeletion) Update(gtx layout.Context, store ScreenshotStore) bool {
+	if result, ok := d.deleter.Result(); ok {
+		if result.err != nil {
+			slog.Error("delete chat screenshot", "path", d.path, "error", result.err)
+			d.errText = "Couldn't delete this screenshot."
+			return false
+		}
+		d.path = ""
+		return true
+	}
+	if d.cancel.Clicked(gtx) {
+		d.path = ""
+	}
+	if d.confirm.Clicked(gtx) && d.path != "" && !d.deleter.IsLoading() {
+		path := d.path
+		d.deleter.Start(func() (struct{}, error) { return struct{}{}, store.Delete(path) })
+	}
+	return false
+}
+
+// Layout draws the dialog while a deletion is being asked about.
+func (d *shotDeletion) Layout(gtx layout.Context, theme *material.Theme) {
+	if d.path == "" {
+		return
+	}
+	d.dialog.Layout(gtx, theme, "Delete this screenshot?",
 		"The image file is removed from your computer for good.",
 		func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return primaryButton(&v.confirmDelete, "Delete").Layout(gtx, theme)
+					return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return dangerButton(&d.confirm, "Delete").withIcon(iconTrash).Layout(gtx, theme)
+						}),
+						layout.Rigid(layout.Spacer{Width: spacingSmall}.Layout),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return secondaryButton(&d.cancel, "Cancel").Layout(gtx, theme)
+						}),
+					)
 				}),
-				layout.Rigid(layout.Spacer{Width: spacingSmall}.Layout),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return secondaryButton(&v.cancelDelete, "Cancel").Layout(gtx, theme)
-				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return errorCaption(gtx, theme, d.errText) }),
 			)
 		})
 }

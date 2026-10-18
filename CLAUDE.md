@@ -30,7 +30,10 @@ code, whenever the change is worth noting:
 
 - **Go** 1.27+ (see `go.mod`).
 - **UI:** [Gio](https://gioui.org) (`gioui.org`) — immediate-mode, pure Go, no CGO needed on
-  Windows, Material-style widgets via `gioui.org/widget/material`.
+  Windows. `gioui.org/widget/material` only for labels, editors and lists; buttons, controls,
+  icons and the title bar are WorldKit's own (`internal/ui`).
+- **Fonts:** Geist and Geist Mono, embedded from `assets/fonts` (OFL-1.1, keep `OFL.txt`
+  next to them). The text shaper loads only these; never fall back to system fonts.
 - `golang.org/x/image` for high-quality image resampling (Gio only scales linearly).
 - `github.com/syndtr/goleveldb` (pulls in `github.com/golang/snappy`) to read FiveM's LevelDB
   key-value store, where GTA World keeps its chat log. Pure Go, read-only use, on a copy only.
@@ -109,6 +112,12 @@ assets/              embedded files (//go:embed). logo.png (384×384, transparen
 - Never block the UI goroutine. Do slow work in a goroutine, then send the result back and call
   `window.Invalidate()`. For one-shot reads (disk, parsing) use `backgroundLoad` in
   `internal/ui/load.go`: `Start` in input handling, `Result` at the top of `Layout`.
+- **The window has no Windows title bar** (`app.Decorated(false)`). Window buttons live in
+  `titleBar`; drag areas use `moveArea` (`system.ActionInputOp(system.ActionMove)`). Never put a
+  clickable inside a move area: Windows takes those clicks.
+- Icons are `strokeIcon` path strings in `internal/ui/icons.go`; add new ones there.
+- Windows APIs without a Go wrapper (e.g. the folder dialog) are called through COM/syscalls
+  with `golang.org/x/sys/windows` in their own `internal/<name>` package, never CGO.
 - Animations: use `expandAnimation` (or a sibling type in `animation.go`) driven by `gtx.Now`;
   request frames with `gtx.Execute(op.InvalidateCmd{})` only while animating.
 - Constraints gotcha: `layout.W`/`E` keep `Min.Y` (and `N`/`S` keep `Min.X`). Clear the other

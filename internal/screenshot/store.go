@@ -168,3 +168,8 @@ func (s *Store) Delete(path string) error {
 	}
 	return nil
 }
+
+// Dir returns the folder screenshots are saved in.
+func (s *Store) Dir() string {
+	return s.dir
+}

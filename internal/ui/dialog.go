@@ -26,33 +26,29 @@ func (d *dialog) Layout(gtx layout.Context, theme *material.Theme, title, messag
 	})
 	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, gtx.Dp(dialogWidth))
-		return card(gtx, func(gtx layout.Context) layout.Dimensions {
+		gtx.Constraints.Min.X = gtx.Constraints.Max.X
+		return card(gtx, spacingXLarge, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(pageTitle(theme, title).Layout),
+				layout.Rigid(screenTitle(theme, title).Layout),
 				layout.Rigid(layout.Spacer{Height: spacingSmall}.Layout),
-				layout.Rigid(bodyText(theme, message).Layout),
-				layout.Rigid(layout.Spacer{Height: spacingLarge}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					label := bodyText(theme, message)
+					label.Color = colorTextSecondary
+					return label.Layout(gtx)
+				}),
+				layout.Rigid(layout.Spacer{Height: spacingXLarge}.Layout),
 				layout.Rigid(content),
 			)
 		})
 	})
 }
 
-// card draws content on a bordered surface panel with page-sized padding, filling the width.
-func card(gtx layout.Context, content layout.Widget) layout.Dimensions {
-	return paddedSurface(gtx, spacingLarge, content)
-}
-
-// panel is a compact card (spacingMedium padding) for tool panels inside a page.
-func panel(gtx layout.Context, content layout.Widget) layout.Dimensions {
-	return paddedSurface(gtx, spacingMedium, content)
-}
-
-func paddedSurface(gtx layout.Context, padding unit.Dp, content layout.Widget) layout.Dimensions {
+// card draws content on a bordered surface panel with the given padding, filling the width.
+func card(gtx layout.Context, padding unit.Dp, content layout.Widget) layout.Dimensions {
 	gtx.Constraints.Min.X = gtx.Constraints.Max.X
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			return outlinedSurface(gtx, colorSurface)
+			return outlinedSurface(gtx, colorSurface, colorDivider, radiusCard)
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			// Stack clears Min for stacked children; restore the full width.
@@ -63,12 +59,21 @@ func paddedSurface(gtx layout.Context, padding unit.Dp, content layout.Widget) l
 }
 
 // outlinedSurface fills the minimum size with a rounded panel and a 1 dp border.
-// It is the background of cards, text fields and list rows.
-func outlinedSurface(gtx layout.Context, fill color.NRGBA) layout.Dimensions {
+// It is the background of cards, rows and the chat panel.
+func outlinedSurface(gtx layout.Context, fill, border color.NRGBA, radius unit.Dp) layout.Dimensions {
 	size := gtx.Constraints.Min
-	shape := clip.UniformRRect(image.Rectangle{Max: size}, gtx.Dp(cornerRadius))
+	shape := clip.UniformRRect(image.Rectangle{Max: size}, gtx.Dp(radius))
 	paint.FillShape(gtx.Ops, fill, shape.Op(gtx.Ops))
-	border := clip.Stroke{Path: shape.Path(gtx.Ops), Width: float32(gtx.Dp(borderWidth))}
-	paint.FillShape(gtx.Ops, colorBorder, border.Op())
+	stroke := clip.Stroke{Path: shape.Path(gtx.Ops), Width: float32(gtx.Dp(borderWidth))}
+	paint.FillShape(gtx.Ops, border, stroke.Op())
 	return layout.Dimensions{Size: size}
+}
+
+// floatingSurface is outlinedSurface raised above the page with a soft shadow: menus, toasts.
+func floatingSurface(gtx layout.Context) layout.Dimensions {
+	size := gtx.Constraints.Min
+	offset := gtx.Dp(spacingTiny)
+	shadow := clip.UniformRRect(image.Rect(0, offset, size.X, size.Y+offset), gtx.Dp(radiusControl+spacingTiny))
+	paint.FillShape(gtx.Ops, colorShadow, shadow.Op(gtx.Ops))
+	return outlinedSurface(gtx, colorElevatedSurface, colorBorderStrong, radiusFloating)
 }

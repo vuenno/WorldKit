@@ -3,7 +3,6 @@ package ui
 import (
 	"image"
 
-	"gioui.org/font"
 	"gioui.org/io/event"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
@@ -13,11 +12,13 @@ import (
 	"gioui.org/widget/material"
 )
 
-// selectionMenu is the small horizontal menu that pops up next to selected chat lines.
-// It is placed against the selection each frame, so it follows the lines while the list
-// scrolls.
+// selectionMenu is the floating horizontal bar that pops up next to selected chat lines:
+// how many are selected, Copy, Extract image and a × that clears the selection. It is
+// placed against the selection each frame, so it follows the lines while the list scrolls.
 type selectionMenu struct {
+	copy    widget.Clickable
 	extract widget.Clickable
+	clear   widget.Clickable
 	isOpen  bool
 	anchorX int // pointer x where the selection ended, in list pixels
 }
@@ -31,7 +32,7 @@ func (m *selectionMenu) Close() {
 	m.isOpen = false
 }
 
-// ExtractClicked reports whether Extract was clicked, closing the menu if so.
+// ExtractClicked reports whether Extract image was clicked, closing the menu if so.
 func (m *selectionMenu) ExtractClicked(gtx layout.Context) bool {
 	if !m.extract.Clicked(gtx) {
 		return false
@@ -40,7 +41,18 @@ func (m *selectionMenu) ExtractClicked(gtx layout.Context) bool {
 	return true
 }
 
-// swallowPresses drops presses on the menu's padding so they don't start a new selection
+// CopyClicked reports whether Copy was clicked. The menu stays open, so the user can
+// still extract the same lines.
+func (m *selectionMenu) CopyClicked(gtx layout.Context) bool {
+	return m.copy.Clicked(gtx)
+}
+
+// ClearClicked reports whether × was clicked.
+func (m *selectionMenu) ClearClicked(gtx layout.Context) bool {
+	return m.clear.Clicked(gtx)
+}
+
+// swallowPresses drops presses on the bar's padding so they don't start a new selection
 // in the list below.
 func (m *selectionMenu) swallowPresses(gtx layout.Context) {
 	for {
@@ -50,13 +62,13 @@ func (m *selectionMenu) swallowPresses(gtx layout.Context) {
 	}
 }
 
-// Layout draws the menu's surface and items at its natural size.
-func (m *selectionMenu) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensions {
+// Layout draws the bar at its natural size for count selected lines.
+func (m *selectionMenu) Layout(gtx layout.Context, theme *material.Theme, count int) layout.Dimensions {
 	m.swallowPresses(gtx)
 	gtx.Constraints.Min = image.Point{}
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			dims := outlinedSurface(gtx, colorElevatedSurface)
+			dims := floatingSurface(gtx)
 			defer clip.Rect{Max: dims.Size}.Push(gtx.Ops).Pop()
 			event.Op(gtx.Ops, m)
 			pointer.CursorDefault.Add(gtx.Ops)
@@ -64,50 +76,34 @@ func (m *selectionMenu) Layout(gtx layout.Context, theme *material.Theme) layout
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			return layout.UniformInset(spacingTiny).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return menuItem{click: &m.extract, label: "Extract"}.Layout(gtx, theme)
-					}),
-				)
+				return m.layoutItems(gtx, theme, count)
 			})
 		}),
 	)
 }
 
-// menuItem is one text action in a popup menu; it highlights on hover.
-type menuItem struct {
-	click *widget.Clickable
-	label string
+func (m *selectionMenu) layoutItems(gtx layout.Context, theme *material.Theme, count int) layout.Dimensions {
+	row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}
+	return row.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			inset := layout.Inset{Left: spacingSmall, Right: spacingMedium - spacingTiny/2}
+			return inset.Layout(gtx, secondaryText(theme, plural(count, "line", "lines")).Layout)
+		}),
+		layout.Rigid(verticalDivider),
+		layout.Rigid(layout.Spacer{Width: spacingTiny}.Layout),
+		layout.Rigid(ghostButton(&m.copy, "Copy").withIcon(iconCopy).Widget(theme)),
+		layout.Rigid(layout.Spacer{Width: spacingTiny}.Layout),
+		layout.Rigid(primaryButton(&m.extract, "Extract image").withIcon(iconImage).withHeight(controlHeightSmall).Widget(theme)),
+		layout.Rigid(layout.Spacer{Width: spacingTiny}.Layout),
+		layout.Rigid(iconButton(&m.clear, iconClose).withKind(buttonGhost).withHeight(controlHeightSmall).Widget(theme)),
+	)
 }
 
-func (i menuItem) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensions {
-	return i.click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Stack{Alignment: layout.Center}.Layout(gtx,
-			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				size := gtx.Constraints.Min
-				shape := clip.UniformRRect(image.Rectangle{Max: size}, gtx.Dp(cornerRadius))
-				defer shape.Push(gtx.Ops).Pop()
-				pointer.CursorPointer.Add(gtx.Ops)
-				if i.click.Hovered() {
-					paint.Fill(gtx.Ops, colorBorder)
-				}
-				return layout.Dimensions{Size: size}
-			}),
-			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-				gtx.Constraints.Min.Y = gtx.Dp(menuItemHeight)
-				inset := layout.Inset{Left: spacingMedium, Right: spacingMedium}
-				return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						label := material.Label(theme, textSizeBody, i.label)
-						label.Font.Weight = font.Medium
-						label.MaxLines = 1
-						label.Color = colorTextPrimary
-						return label.Layout(gtx)
-					})
-				})
-			}),
-		)
-	})
+// verticalDivider is a short 1 dp line separating groups in a toolbar.
+func verticalDivider(gtx layout.Context) layout.Dimensions {
+	size := image.Pt(gtx.Dp(borderWidth), gtx.Dp(dividerHeight))
+	paint.FillShape(gtx.Ops, colorBorderStrong, clip.Rect{Max: size}.Op())
+	return layout.Dimensions{Size: size}
 }
 
 // selectionMenuOrigin places a menu of menuSize above the selection (or below it when

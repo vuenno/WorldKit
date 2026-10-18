@@ -4,7 +4,7 @@ import "testing"
 
 func TestChatLineListSurvivesScrollingPastTheEdges(t *testing.T) {
 	list := newChatLineList()
-	list.SetLines(make([]chatLine, 5))
+	list.SetLines(make([]chatLine, 5), true)
 	for i := range list.rowHeights {
 		list.rowHeights[i] = 20
 	}

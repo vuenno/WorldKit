@@ -58,7 +58,7 @@ func TestLineSelection(t *testing.T) {
 
 func TestChatLineListCopyText(t *testing.T) {
 	list := newChatLineList()
-	list.SetLines([]chatLine{{text: "a"}, {text: "b"}, {text: "c"}, {text: "d"}})
+	list.SetLines([]chatLine{{copyText: "a"}, {copyText: "b"}, {copyText: "c"}, {copyText: "d"}}, false)
 	if got := list.CopyText(); got != "a\nb\nc\nd" {
 		t.Errorf("without selection got %q, want every line", got)
 	}
@@ -67,7 +67,7 @@ func TestChatLineListCopyText(t *testing.T) {
 	if got := list.CopyText(); got != "b\nc" || list.SelectedCount() != 2 {
 		t.Errorf("got %q (%d selected), want %q (2)", got, list.SelectedCount(), "b\nc")
 	}
-	list.SetLines([]chatLine{{text: "x"}})
+	list.SetLines([]chatLine{{copyText: "x"}}, false)
 	if list.SelectedCount() != 0 {
 		t.Error("new lines kept the old selection")
 	}
