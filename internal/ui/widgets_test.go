@@ -15,7 +15,9 @@ import (
 func TestIconPathsParse(t *testing.T) {
 	icons := []strokeIcon{iconArrowLeft, iconSearch, iconCopy, iconImage, iconFolder, iconTrash, iconClose,
 		iconChevronRight, iconChevronDown, iconPanelLeft, iconFileText, iconSliders, iconUsers, iconCheck,
-		iconArrowRight, iconPencil, iconItalic, iconMinus, iconPlus, glyphMinimize, glyphMaximize, glyphRestore, glyphClose}
+		iconArrowRight, iconPencil, iconItalic, iconMinus, iconPlus, glyphMinimize, glyphMaximize, glyphRestore, glyphClose,
+		iconLayers, iconImages, iconChat, iconUndo, iconRedo, iconExport, iconFit, iconEye, iconEyeOff,
+		iconLock, iconUnlock, iconRotate, iconChevronUp, iconAlert}
 	for _, icon := range icons {
 		var ops op.Ops
 		var path clip.Path

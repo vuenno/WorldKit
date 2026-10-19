@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"world-kit/internal/atomicfile"
 )
 
 const (
@@ -77,29 +79,14 @@ func (s *Store) freePath(saved time.Time) (string, error) {
 	}
 }
 
-// writePNG writes picture to a temporary file first, so a crash never leaves a
+// writePNG encodes picture and writes it atomically, so a crash never leaves a
 // half-written screenshot under its final name.
 func writePNG(path string, picture *Picture) error {
 	data, err := encodePNG(picture.Image, picture.FontSize)
 	if err != nil {
 		return fmt.Errorf("encode screenshot %q: %w", path, err)
 	}
-	file, err := os.CreateTemp(filepath.Dir(path), "saving-*.tmp")
-	if err != nil {
-		return fmt.Errorf("create screenshot file: %w", err)
-	}
-	tempPath := file.Name()
-	_, writeErr := file.Write(data)
-	closeErr := file.Close()
-	if err := errors.Join(writeErr, closeErr); err != nil {
-		// The temp file is useless now; failing to remove it only leaves a stray .tmp.
-		_ = os.Remove(tempPath)
-		return fmt.Errorf("write screenshot %q: %w", path, err)
-	}
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("save screenshot %q: %w", path, err)
-	}
-	return nil
+	return atomicfile.Write(path, data)
 }
 
 // List returns every saved screenshot, newest first. A folder that doesn't exist yet

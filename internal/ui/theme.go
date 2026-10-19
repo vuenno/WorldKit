@@ -167,6 +167,50 @@ const (
 	caretWidth         = unit.Dp(1) // the caret when editing text on a screenshot preview
 )
 
+// Screenshot Editor and Saved Screenshots.
+const (
+	editorPagePadding    = spacingXLarge // narrower than spacingPage: the canvas needs the room
+	inspectorWidth       = unit.Dp(216)  // compact, like a design tool's panel: the canvas gets the room
+	inspectorFieldWidth  = unit.Dp(60)   // rotation and percent fields
+	panelPadding         = spacingMedium
+	panelControlHeight   = unit.Dp(24) // fields, segments, icon buttons in the editor's panels
+	panelLabelWidth      = unit.Dp(52) // "Position", "Opacity": lines up the panel's controls
+	panelRowGap          = unit.Dp(6)
+	panelSegmentHeight   = unit.Dp(20) // a compact segment, inside segmentedPadding
+	templateTileMinWidth = unit.Dp(168)
+	templateShapeHeight  = unit.Dp(72) // the area a template tile draws its aspect outline in
+	templateShapeStroke  = unit.Dp(1.5)
+	canvasMargin         = unit.Dp(32) // around the fitted canvas in its area
+	handleSize           = unit.Dp(9)
+	handleHitSize        = unit.Dp(18) // handles are easier to grab than they look
+	rotateHandleOffset   = unit.Dp(26) // the rotation handle above the frame's top edge
+	snapDistance         = unit.Dp(6)
+	layerRowHeight       = unit.Dp(34)
+	layerThumbSize       = unit.Dp(24)
+	exportThumbWidth     = unit.Dp(96)
+	exportThumbHeight    = unit.Dp(54)
+	sliderKnobSize       = unit.Dp(16)
+	sliderTrackHeight    = unit.Dp(4)
+	menuWidth            = unit.Dp(260)
+	menuMaxHeight        = unit.Dp(360)
+	navBadgeSize         = unit.Dp(6) // the dot on a nav item with work in progress
+	checkBadgeSize       = unit.Dp(22)
+
+	// offCanvasOpacity is how strongly the selected layer's parts outside the canvas show.
+	offCanvasOpacity = 0.25
+	// disabledOpacity fades controls that can't be used right now (Undo with nothing to undo).
+	disabledOpacity = 0.4
+)
+
+// Pixel sizes of the editor's images (pixels, not dp: they describe decoded images).
+const (
+	previewMaxSide   = 2048 // a layer's preview texture: sharp enough, and safe on every GPU
+	thumbnailMaxSide = 128  // layer rows and Saved Screenshots rows
+	// memoryWarningBytes is how much image memory (CPU copies plus GPU textures with
+	// their mipmaps) the editor holds before it suggests using fewer or smaller images.
+	memoryWarningBytes = 600 << 20
+)
+
 // Window chrome: WorldKit draws its own title bar instead of the Windows one.
 const (
 	titleBarHeight    = unit.Dp(40)

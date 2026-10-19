@@ -160,6 +160,21 @@ Spacing follows a 4 dp grid: `spacingTiny` 4, `spacingSmall` 8, `spacingMedium` 
 | `caretWidth`            | 1 dp   | The caret in the picture editor       |
 | `optionLabelWidth`      | 88 dp  | Label column of the Extract dialog's options |
 | `stepperValueWidth`     | 52 dp  | The value between a number stepper's − and + |
+| `inspectorWidth`        | 216 dp | The editor's right panel (inspector, layers): compact, like a design tool's |
+| `panelControlHeight`    | 24 dp  | Fields, compact segments, icon and text buttons in that panel |
+| `panelLabelWidth` / `panelRowGap` / `panelPadding` | 52 / 6 / 12 dp | The panel's label column, row spacing and card padding |
+| `panelSegmentHeight`    | 20 dp  | A compact segment (inside the 3 dp box padding) |
+| `inspectorFieldWidth`   | 60 dp  | Rotation and percent fields                  |
+| `templateTileMinWidth`  | 168 dp | Canvas size tiles (`templateShapeHeight` 72 dp shape area, 1.5 dp stroke) |
+| `canvasMargin`          | 32 dp  | Around the fitted canvas                     |
+| `handleSize` / `handleHitSize` | 9 / 18 dp | Resize handles: drawn / grabbable |
+| `rotateHandleOffset`    | 26 dp  | Rotation handle above the frame's top edge   |
+| `snapDistance`          | 6 dp   | How close a dragged layer snaps to the canvas edges/center |
+| `layerRowHeight` / `layerThumbSize` | 34 / 24 dp | Layers list rows and thumbnails |
+| `exportThumbWidth` × `exportThumbHeight` | 96 × 54 dp | Saved Screenshots thumbnails |
+| `menuWidth` / `menuMaxHeight` | 260 / 360 dp | Dropdown menus                    |
+| `checkBadgeSize`        | 22 dp  | The check on a selected chat image card      |
+| `editorPagePadding`     | 24 dp  | The editor's page padding (the canvas needs the room) |
 
 ## Icons
 
@@ -198,6 +213,18 @@ Line icons on a 24-unit grid with 1.8-unit rounded strokes (`strokeIcon`,
   its `width`): screen title, secondary body text, 24 dp, controls (primary/danger first).
 - **Color swatch** (`layoutSwatch`): a 22 dp dot in its color; hovered, a 2 dp
   `colorTextPrimary` ring. Clicking applies the color; swatches have no selected state.
+- **Number field** (`numberField`, `inputs.go`): one number edited in place, 32 dp, the input
+  look with `radiusMenu`, a tertiary prefix ("X", "W") and unit ("px", "°", "%"), the value in
+  13 sp Geist Mono; orange outline while focused. Enter or clicking away commits; anything
+  that isn't a number snaps back.
+- **Slider** (`slider`): a 4 dp `colorPressed` track, orange up to the 16 dp
+  `colorTextPrimary` knob, `segmentHeight` tall. Click or drag anywhere on it.
+- **Dropdown** (`dropdownMenu`, `menu.go`): a 36 dp secondary-style button with a chevron
+  (Geist Mono label for sizes) opening a floating menu (260 dp wide, up to 360 dp tall) below
+  it: 32 dp rows (label, Geist Mono detail at the right), group labels as headings; closes on
+  a pick or any click outside.
+- **Disabled controls** (`layoutEnabled`): drawn at `disabledOpacity` (0.4), no input.
+- **Confirm prompt** (`confirmPrompt`): a `dialog` with a danger confirm button and Cancel.
 - **Picture editor** (`pictureEditor`): text edited on a rendered image. Text cursor over
   the whole preview; selection `colorPrimary` at `selectionOpacity` behind the glyphs;
   caret `caretWidth` (1 dp) `colorTextPrimary`, shown while focused, not blinking.
@@ -209,7 +236,12 @@ Fixed on the left, full height, `colorSidebar`, 1 dp `colorDivider` on its right
 
 - **Header**: logo + name/subtitle (a window move area), collapse button (ghost icon button,
   panel icon) at the right. Collapsed, only the collapse button shows.
-- **Main destinations**, 4 dp apart: **Logs** (file icon), **Log Screenshots** (image icon).
+- **Main destinations**, 4 dp apart, in two groups split by a 1 dp `colorDivider` line
+  (12 dp side insets; a destination with `StartsGroup`): making chat images — **Logs** (file
+  icon), **Log Screenshots** (image icon) — then using them — **Screenshot Editor** (layers
+  icon), **Saved Screenshots** (images icon).
+- **Badge**: a `navBadgeSize` (6 dp) orange dot on a nav icon's top-right corner means work
+  in progress on that page (the editor has layers). Visible collapsed too.
 - **Capture card** at the bottom: status dot + title ("Capturing", "Watching", "Retrying…",
   "Not capturing") and a caption ("Last line saved at 18:45:12"). `colorSurface`, 1 dp
   divider, 12 dp padding. Collapsed: the dot alone.
@@ -338,7 +370,98 @@ What Extract image writes: a PNG players lay over game screenshots, styled like 
     (Geist Mono) + **Browse…** (opens Windows' folder dialog; Enter in the field saves a
     typed path), hint caption.
   - **Startup**: "Start with Windows" + description, switch at the right.
+  - **Screenshot Editor**: "Export folder" path field (Geist Mono, hint = the default
+    `Pictures\WorldKit`) + **Browse…**; Enter saves a typed path, an emptied field goes back to
+    the default. Then "Export presets": one row per preset (name, Geist Mono "JPEG · 90% ·
+    1920 × 1080"), an orange **Default** pill or ghost **Make default**, and a ghost danger
+    delete icon; "No presets yet." when empty. Presets are made in the export dialog.
   - **Files**: Chat logs / Screenshots rows with their path (Geist Mono caption) and an
     **Open folder** button.
 - Footer caption: version and "Reads FiveM's chat store passively; never touches the game."
 - In the first-run "Where is FiveM's data?" dialog, Browse… is the primary button.
+
+## Screenshot Editor
+
+Lays chat images over game screenshots (`EditorPage`, `internal/ui/editor_*.go`). The work
+stays when the user switches pages; the nav icon shows a badge while there are layers.
+
+- **Template picker** (no canvas yet): `pageHeader` "Screenshot Editor" + "Lay chat images
+  over your game screenshots. Pick a canvas size to start." and secondary **Start from an
+  image…** (the canvas takes the first picked image's size). Group "CANVAS SIZE": tiles
+  (≥ 168 dp, 16 dp apart, `colorSurface`, `radiusCard`, 16 dp padding): the size's shape at
+  its true aspect ratio (1.5 dp `colorTextTertiary` outline; orange with a faint orange fill
+  on hover, border `colorBorderStrong`), name (14 sp SemiBold), size in Geist Mono caption.
+  Full HD, 1440p, 4K UHD, HD, Square, Portrait (1080 × 1350), Story (1080 × 1920). "CUSTOM
+  SIZE": W and H number fields, secondary **Create canvas**, caption "16 to 8192 px a side."
+  "YOUR PRESETS": the same tiles for saved presets, with their format as a caption line.
+- **Workspace**: 24 dp page padding. Toolbar (36 dp controls, 8 dp apart, wrapping): secondary
+  **Close** (× icon; back to the template picker, asking first when there are layers),
+  divider, the canvas size dropdown (Geist Mono "1920 × 1080": sizes, presets, **New canvas…**; changing
+  the size keeps the layers centered), divider, **Add images** (image icon), **Add chat
+  image** (chat icon), divider, Undo, Redo, Fit (icon buttons; disabled when there is
+  nothing to undo/redo); at the right the primary **Export** (export icon; disabled with no
+  layers). 12 dp below: the canvas area (flexed) and, 12 dp to its right, the 216 dp panel
+  (inspector, 8 dp, layers).
+- **Canvas area**: a `colorSidebar` panel, `radiusCard`, 1 dp divider. The canvas is fitted
+  with a 32 dp margin, drawn over a 4 dp `colorShadow` offset, 1 dp `colorBorderStrong`
+  outline; transparent background = checkerboard, or Black/White. Layers are clipped to the
+  canvas; the selected layer's parts outside it show at `offCanvasOpacity` (25 %). Geist Mono
+  caption "1920 × 1080 · 42%" bottom-left (8 dp in). Empty: "Add a game screenshot, then chat
+  images on top." centered. Toasts bottom-right, 16 dp in.
+- **Selection**: 1 dp orange frame along the rotated layer; eight 9 dp square handles
+  (`colorTextPrimary` with a 1 dp orange ring, grabbable 18 dp wide) and a round rotation
+  handle 26 dp above the top edge on a 1 dp orange stem. Cursors: grab over a layer,
+  grabbing while dragging, the two-way resize arrow nearest each handle's rotated
+  direction, crosshair on the rotation handle.
+- **Gestures**: click selects the top-most visible layer (empty canvas: nothing); drag
+  moves, snapping its edges/center to the canvas edges/center within 6 dp with 1 dp orange
+  guide lines (Alt: no snapping); corners resize keeping the aspect ratio (Shift: free),
+  edges stretch; the rotation handle turns it (Shift: 15° steps). Ctrl+wheel zooms at the
+  pointer, the wheel pans a zoomed canvas, middle-drag (or dragging empty canvas while
+  zoomed) pans, Fit returns. A whole drag is one undo step.
+- **Keys** (canvas focused after a click): Delete/Backspace, arrows 1 px (Shift 10 px),
+  `]` / `[` one step up/down (Ctrl: to front/back; also Ctrl+↑/↓), Esc deselects. Anywhere:
+  Ctrl+Z, Ctrl+Y / Ctrl+Shift+Z, Ctrl+D duplicate, Ctrl+E export, Ctrl+0 fit.
+- **Inspector card** (12 dp padding, dense like a design tool's properties panel): with a
+  layer selected, its name (13 sp SemiBold) with ghost Duplicate and Delete (danger) 24 dp
+  icons; rows 6 dp apart with a 52 dp caption label column and compact 24 dp fields
+  (Geist Mono 12 sp, 4 dp padding): **Position** X/Y, **Size** W/H + lock toggle (locked
+  keeps the aspect ratio), **Rotate** ° field + rotate-90° icon, **Opacity** slider (24 dp)
+  + % field; then 24 dp secondary **Fit canvas** and **Real size** sharing the width. Nothing
+  selected: CANVAS (group label) — Size W/H and Fill, a compact segmented control
+  **None · Black · White** whose segments share the width.
+- **Layers card** (fills the rest, scrolls): LAYERS (group label) + Geist Mono count; rows
+  front-most first, 34 dp, `radiusMenu`: 24 dp checkerboard thumbnail, name (12 sp Medium;
+  tertiary when hidden) over an 11 sp tertiary "Chat image · 465 × 86 · 60%" ("Loading…", or "File missing or unreadable" in
+  `colorDanger`); hovered: `colorElevatedSurface` and ghost eye / up / down icons; the
+  selected row looks like the active nav item (orange bar). Hidden layers keep the eye-off
+  icon visible.
+- **Add chat images** dialog (720 dp): the Log Screenshots as cards (≥ 210 dp, 105 dp
+  checkerboard preview at 1:1, time and size); clicking toggles selection: 2 dp orange
+  outline and a 22 dp orange check badge in the footer. Primary **Add 2 images**, Cancel.
+- **Export image** dialog (540 dp): "1920 × 1080 px · 3 layers"; option rows (88 dp label
+  column, one-line hints): **Preset** dropdown (when presets exist; "Custom" once changed),
+  **Format** PNG · JPEG, for PNG **Quality** Lossless · Smaller file, then **Colors** (PNG
+  smaller) or **Quality** (JPEG) stepper 10–100 % in 5 % steps (JPEG default 92). JPEG over a
+  transparent canvas warns in `colorWarning`. Link **Save as preset…** opens a name field +
+  **Save preset** / Cancel. Primary **Export…** ("Exporting…" while busy) opens Save As
+  offering only the chosen format, named `worldkit-<UTC time>`, in the last export folder
+  (else the Settings folder). Done: toast "Exported <name> · **Show in folder**".
+- **Close** and **New canvas…** with layers ask "Close this canvas?" (danger **Close
+  canvas**); without layers they go straight back to the template picker.
+
+## Saved Screenshots page
+
+- Header: "Saved Screenshots" + "Everything you exported from the Screenshot Editor.";
+  secondary **Open folder** (the export folder).
+- Rows (≤ 960 dp, grouped by day like Logs, 8 dp apart; `colorSurface` → elevated on hover,
+  1 dp divider, 14 dp radius, 12/16 dp padding): 96×54 dp checkerboard thumbnail; file name
+  (14 sp SemiBold) over its folder (Geist Mono caption); "1920 × 1080" over "PNG · Lossless";
+  file size over the time; while hovered, ghost Show in folder and Delete (danger) icons.
+  A moved/deleted file shows "File moved or deleted" (or "Changed since it was exported") in
+  `colorWarning`, an alert icon instead of the thumbnail, and ghost **Remove from list**.
+- Clicking a row opens it: back, screen title = file name over "Saved today, 14:18 UTC",
+  primary **Show in folder**, danger **Delete** icon; the image fitted on a checkerboard in a
+  `colorSidebar` panel, and a Details card (Saved, Size, Format, File, Folder).
+- Delete asks like Log Screenshots ("Delete this screenshot?").
+- Empty: images icon, "Nothing exported yet.", a hint and secondary **Open Screenshot Editor**.

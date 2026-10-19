@@ -12,8 +12,9 @@ import (
 
 	"world-kit/internal/capture"
 	"world-kit/internal/chatlog"
+	"world-kit/internal/exports"
+	"world-kit/internal/filedialog"
 	"world-kit/internal/fivem"
-	"world-kit/internal/folderpicker"
 	"world-kit/internal/screenshot"
 	"world-kit/internal/settings"
 )
@@ -25,15 +26,36 @@ type Services struct {
 	Logs        LogLibrary
 	Screenshots ScreenshotStore
 	Startup     StartupEntry // nil when the startup entry is unavailable
-	Folders     FolderPicker
+	Files       FileDialogs
+	Exports     ExportList
+	// DefaultExportDir is where exports go until the user picks a folder in Settings.
+	DefaultExportDir string
 
 	window uintptr // the window's handle, so dialogs can be modal to it; set by Run
 }
 
-// FolderPicker shows the system's folder dialog over owner and blocks until the user picks
-// a folder (or cancels: folderpicker.ErrCanceled).
-type FolderPicker interface {
-	Pick(owner uintptr, title, startDir string) (string, error)
+// FileDialogs shows the system's file dialogs over owner. Each blocks until the user
+// chooses (or cancels: filedialog.ErrCanceled), so call them off the UI goroutine.
+type FileDialogs interface {
+	PickFolder(owner uintptr, title, startDir string) (string, error)
+	OpenFiles(owner uintptr, title, startDir string, types []filedialog.FileType) ([]string, error)
+	Save(owner uintptr, options filedialog.SaveOptions) (string, error)
+}
+
+// ExportList records the Screenshot Editor's exports and lists, forgets and deletes them.
+type ExportList interface {
+	Add(entry exports.Entry) error
+	List() ([]exports.Item, error)
+	Remove(path string) error
+	Delete(path string) error
+}
+
+// ExportDir is the folder exports start in: the one picked in Settings, or the default.
+func (s Services) ExportDir() string {
+	if dir := s.Settings.Get().ExportDir; dir != "" {
+		return dir
+	}
+	return s.DefaultExportDir
 }
 
 // LogLibrary lists the saved chat sessions and reads their lines.
@@ -152,13 +174,13 @@ func (f *dataDirForm) prefill(dataDir string) {
 func (f *dataDirForm) startPicker(services Services) {
 	owner, startDir := services.window, f.editor.Text()
 	f.picker.Start(func() (string, error) {
-		return services.Folders.Pick(owner, "Select FiveM's data folder (CitizenFX)", startDir)
+		return services.Files.PickFolder(owner, "Select FiveM's data folder (CitizenFX)", startDir)
 	})
 }
 
 func (f *dataDirForm) receivePickedFolder(services Services) {
 	result, ok := f.picker.Result()
-	if !ok || errors.Is(result.err, folderpicker.ErrCanceled) {
+	if !ok || errors.Is(result.err, filedialog.ErrCanceled) {
 		return
 	}
 	if result.err != nil {
