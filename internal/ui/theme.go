@@ -195,6 +195,8 @@ const (
 	menuMaxHeight        = unit.Dp(360)
 	navBadgeSize         = unit.Dp(6) // the dot on a nav item with work in progress
 	checkBadgeSize       = unit.Dp(22)
+	checkboxSize         = unit.Dp(16) // a toggle row in a menu (Characters)
+	checkboxRadius       = unit.Dp(4)
 
 	// offCanvasOpacity is how strongly the selected layer's parts outside the canvas show.
 	offCanvasOpacity = 0.25

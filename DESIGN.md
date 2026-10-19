@@ -223,6 +223,10 @@ Line icons on a 24-unit grid with 1.8-unit rounded strokes (`strokeIcon`,
   (Geist Mono label for sizes) opening a floating menu (260 dp wide, up to 360 dp tall) below
   it: 32 dp rows (label, Geist Mono detail at the right), group labels as headings; closes on
   a pick or any click outside.
+- **Checkbox** (`checkbox`): a 16 dp box, 4 dp radius, marking menu rows that toggle (Characters).
+  Off: 1 dp `colorBorderStrong` outline (`colorTextTertiary` while the row is hovered). On:
+  `colorPrimary` fill with a 12 dp `colorOnPrimary` check. Always drawn, so the labels after it
+  stay in one column; 10 dp before the label.
 - **Disabled controls** (`layoutEnabled`): drawn at `disabledOpacity` (0.4), no input.
 - **Confirm prompt** (`confirmPrompt`): a `dialog` with a danger confirm button and Cancel.
 - **Picture editor** (`pictureEditor`): text edited on a rendered image. Text cursor over
@@ -277,7 +281,7 @@ Fixed on the left, full height, `colorSidebar`, 1 dp `colorDivider` on its right
   window): "Find in log" field (240 dp), the line-kind
   segmented control **All · IC · /me · /do · /b · PMs** (one at a time; IC = says, shouts,
   whispers, /me, /do), a **Characters** button (people icon, count badge, chevron) that
-  opens a floating menu of every speaker (check, name, Geist Mono line count; most active
+  opens a floating menu of every speaker (checkbox, name, Geist Mono line count; most active
   first; 260 dp wide, up to 300 dp tall; click outside closes it); at the right, never
   wrapped, "Timestamps" + switch (off by default; display only, not a filter).
 - **Summary row** (12 dp below): "Showing [John Doe ×] [Jane Roe ×] · 64 of 113 lines" and

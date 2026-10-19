@@ -310,30 +310,36 @@ func (r characterMenuRow) Layout(gtx layout.Context, theme *material.Theme) layo
 		}
 		inset := layout.Inset{Left: spacingSmall, Right: spacingMedium}
 		return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}
-			return row.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					side := gtx.Dp(iconSize)
-					if !r.option.isOn {
-						return layout.Dimensions{Size: image.Pt(side, side)}
-					}
-					return iconCheck.Layout(gtx, iconSize, colorPrimary)
-				}),
-				layout.Rigid(layout.Spacer{Width: spacingSmall}.Layout),
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					label := bodyText(theme, r.option.name)
-					label.TextSize = textSizeSmall
-					label.MaxLines = 1
-					return label.Layout(gtx)
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					label := monoText(theme, textSizeCaption, countText(r.option.lineCount))
-					label.Color = colorTextTertiary
-					return label.Layout(gtx)
-				}),
-			)
+			return layout.W.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				// The row's exact height reaches the labels as their minimum height without
+				// this, so their text draws at the top while the checkbox is centered.
+				gtx.Constraints.Min = image.Pt(gtx.Constraints.Max.X, 0)
+				return r.layoutContent(gtx, theme, click.Hovered())
+			})
 		})
 	})
+}
+
+// layoutContent lays out the checkbox, the name and the line count, centered on one line.
+func (r characterMenuRow) layoutContent(gtx layout.Context, theme *material.Theme, isHovered bool) layout.Dimensions {
+	row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}
+	return row.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return checkbox(gtx, r.option.isOn, isHovered)
+		}),
+		layout.Rigid(layout.Spacer{Width: spacingSmall + spacingTiny/2}.Layout),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			label := bodyText(theme, r.option.name)
+			label.TextSize = textSizeSmall
+			label.MaxLines = 1
+			return label.Layout(gtx)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			label := monoText(theme, textSizeCaption, countText(r.option.lineCount))
+			label.Color = colorTextTertiary
+			return label.Layout(gtx)
+		}),
+	)
 }
 
 // LayoutSummary draws "Showing", a chip per chosen character, the line count and, while

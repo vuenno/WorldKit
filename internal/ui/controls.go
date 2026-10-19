@@ -392,3 +392,25 @@ func (b linkButton) Layout(gtx layout.Context, theme *material.Theme) layout.Dim
 		return dims
 	})
 }
+
+// checkbox draws a small box: an outline when off (brighter while its row is hovered),
+// orange with a dark check when on. It shows that a menu row toggles, and keeps the
+// labels after it in one column whether or not anything is checked.
+func checkbox(gtx layout.Context, isOn, isHovered bool) layout.Dimensions {
+	side := gtx.Dp(checkboxSize)
+	box := image.Rect(0, 0, side, side)
+	shape := clip.UniformRRect(box, gtx.Dp(checkboxRadius))
+	if isOn {
+		paint.FillShape(gtx.Ops, colorPrimary, shape.Op(gtx.Ops))
+		inset := (side - gtx.Dp(chipIconSize)) / 2
+		defer op.Offset(image.Pt(inset, inset)).Push(gtx.Ops).Pop()
+		iconCheck.Layout(gtx, chipIconSize, colorOnPrimary)
+		return layout.Dimensions{Size: box.Max}
+	}
+	border := colorBorderStrong
+	if isHovered {
+		border = colorTextTertiary
+	}
+	paint.FillShape(gtx.Ops, border, clip.Stroke{Path: shape.Path(gtx.Ops), Width: float32(gtx.Dp(borderWidth))}.Op())
+	return layout.Dimensions{Size: box.Max}
+}
