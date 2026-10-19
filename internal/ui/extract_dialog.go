@@ -35,6 +35,7 @@ type extractDialog struct {
 	dialog     dialog
 	editor     pictureEditor
 	backdrop   *segmentedControl
+	fontSize   *numberStepper
 	save       widget.Clickable
 	edit       widget.Clickable
 	cancel     widget.Clickable
@@ -50,6 +51,7 @@ func newExtractDialog(invalidate func()) *extractDialog {
 	return &extractDialog{
 		dialog:   dialog{width: extractDialogWidth},
 		backdrop: newSegmentedControl("Transparent", "Dark", "Light"),
+		fontSize: newNumberStepper(screenshot.DefaultFontSize, screenshot.MinFontSize, screenshot.MaxFontSize, "px"),
 		swatches: make([]widget.Clickable, len(textSwatches)),
 		body:     widget.List{List: layout.List{Axis: layout.Vertical}},
 		renderer: newBackgroundLoad[*screenshot.Picture](invalidate),
@@ -57,7 +59,7 @@ func newExtractDialog(invalidate func()) *extractDialog {
 }
 
 // Open shows the dialog for lines, unedited, their markup (/italic/, *action*) applied.
-// The backdrop stays as last chosen.
+// The backdrop and font size stay as last chosen.
 func (d *extractDialog) Open(lines []chatLine) {
 	d.isOpen, d.isEditing, d.errText = true, false, ""
 	shotLines := make([]screenshot.Line, len(lines))
@@ -73,9 +75,9 @@ func (d *extractDialog) Lines() []screenshot.Line {
 	return d.editor.doc.NonEmptyLines()
 }
 
-// Style returns the chosen backdrop.
+// Style returns the chosen backdrop and font size.
 func (d *extractDialog) Style() screenshot.Style {
-	return screenshot.Style{Backdrop: backdropColor(d.backdrop.selected)}
+	return screenshot.Style{Backdrop: backdropColor(d.backdrop.selected), FontSize: d.fontSize.value}
 }
 
 // renderPreview draws every line, empty ones included, so rows on the picture match the
@@ -107,6 +109,7 @@ func (d *extractDialog) Update(gtx layout.Context) extractOutcome {
 	}
 	d.receivePreview()
 	isChanged := d.backdrop.Update(gtx)
+	isChanged = d.fontSize.Update(gtx) || isChanged
 	isChanged = d.editor.Update(gtx) || isChanged
 	isChanged = d.updateTools(gtx) || isChanged
 	if isChanged {
@@ -184,15 +187,16 @@ func (d *extractDialog) Layout(gtx layout.Context, theme *material.Theme) {
 	})
 }
 
-// Body rows: the tools while editing, the preview, then the backdrop choice.
+// Body rows: the tools while editing, the preview, then the backdrop and font size choices.
 const (
 	extractRowTools = iota
 	extractRowPreview
 	extractRowBackdrop
+	extractRowFontSize
 )
 
 func (d *extractDialog) layoutBody(gtx layout.Context, theme *material.Theme) layout.Dimensions {
-	return styledList(theme, &d.body).Layout(gtx, extractRowBackdrop+1, func(gtx layout.Context, index int) layout.Dimensions {
+	return styledList(theme, &d.body).Layout(gtx, extractRowFontSize+1, func(gtx layout.Context, index int) layout.Dimensions {
 		switch index {
 		case extractRowTools:
 			if !d.isEditing {
@@ -203,9 +207,13 @@ func (d *extractDialog) layoutBody(gtx layout.Context, theme *material.Theme) la
 			})
 		case extractRowPreview:
 			return d.layoutPreview(gtx, theme)
-		default:
+		case extractRowBackdrop:
 			return layout.Inset{Top: spacingMedium}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return d.layoutBackdropRow(gtx, theme)
+				return layoutOptionRow(gtx, theme, "Background", d.backdrop.Layout, "Dark and Light put a box behind each line.")
+			})
+		default:
+			return layout.Inset{Top: spacingSmall}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layoutOptionRow(gtx, theme, "Font size", d.fontSize.Layout, "A bigger font makes a bigger image.")
 			})
 		}
 	})
@@ -254,15 +262,19 @@ func layoutImageFitted(gtx layout.Context, img paint.ImageOp, size, shown image.
 	return layout.Dimensions{Size: shown}
 }
 
-func (d *extractDialog) layoutBackdropRow(gtx layout.Context, theme *material.Theme) layout.Dimensions {
+// layoutOptionRow draws one of the dialog's image options: a label in a fixed column (so
+// the controls line up), the control, then a one-line hint.
+func layoutOptionRow(gtx layout.Context, theme *material.Theme, label string, control func(layout.Context, *material.Theme) layout.Dimensions, hint string) layout.Dimensions {
 	row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}
 	return row.Layout(gtx,
-		layout.Rigid(secondaryText(theme, "Background").Layout),
-		layout.Rigid(layout.Spacer{Width: spacingMedium - spacingTiny/2}.Layout),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return d.backdrop.Layout(gtx, theme) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min.X = gtx.Dp(optionLabelWidth)
+			return secondaryText(theme, label).Layout(gtx)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return control(gtx, theme) }),
 		layout.Rigid(layout.Spacer{Width: spacingMedium}.Layout),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			label := caption(theme, "Dark and Light put a box behind each line.")
+			label := caption(theme, hint)
 			label.MaxLines = 1
 			return label.Layout(gtx)
 		}),

@@ -20,19 +20,19 @@ type faces struct {
 	italic  font.Face
 }
 
-// newFaces returns Arial Bold and Arial Bold Italic at the screenshot size. A face is not
-// safe for concurrent use, so each render makes its own.
-func newFaces() (*faces, error) {
-	regular, regularErr := newFace(loadFont("arialbd.ttf", gobold.TTF))
-	italic, italicErr := newFace(loadFont("arialbi.ttf", gobolditalic.TTF))
+// newFaces returns Arial Bold and Arial Bold Italic at sizePx. A face is not safe for
+// concurrent use, so each render makes its own.
+func newFaces(sizePx int) (*faces, error) {
+	regular, regularErr := newFace(loadFont("arialbd.ttf", gobold.TTF), sizePx)
+	italic, italicErr := newFace(loadFont("arialbi.ttf", gobolditalic.TTF), sizePx)
 	if err := errors.Join(regularErr, italicErr); err != nil {
 		return nil, fmt.Errorf("create screenshot font faces: %w", err)
 	}
 	return &faces{regular: regular, italic: italic}, nil
 }
 
-func newFace(parsed *opentype.Font) (font.Face, error) {
-	return opentype.NewFace(parsed, &opentype.FaceOptions{Size: fontSizePx, DPI: 72, Hinting: font.HintingFull})
+func newFace(parsed *opentype.Font, sizePx int) (font.Face, error) {
+	return opentype.NewFace(parsed, &opentype.FaceOptions{Size: float64(sizePx), DPI: 72, Hinting: font.HintingFull})
 }
 
 func (f *faces) of(isItalic bool) font.Face {

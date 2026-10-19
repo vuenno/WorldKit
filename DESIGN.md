@@ -158,6 +158,8 @@ Spacing follows a 4 dp grid: `spacingTiny` 4, `spacingSmall` 8, `spacingMedium` 
 | `extractDialogWidth`    | 720 dp | Max width of the Extract image dialog |
 | `swatchSize`            | 22 dp  | Color swatches (`swatchRingWidth` 2 dp hover ring) |
 | `caretWidth`            | 1 dp   | The caret in the picture editor       |
+| `optionLabelWidth`      | 88 dp  | Label column of the Extract dialog's options |
+| `stepperValueWidth`     | 52 dp  | The value between a number stepper's − and + |
 
 ## Icons
 
@@ -177,6 +179,9 @@ Line icons on a 24-unit grid with 1.8-unit rounded strokes (`strokeIcon`,
   optional leading icon in `colorTextTertiary`; `isMono` for paths.
 - **Segmented control** (`segmentedControl`): pick one of a few; `colorSurface` box with
   3 dp padding, chosen segment `colorPressed` with `colorTextPrimary`, others secondary.
+- **Number stepper** (`numberStepper`): a whole number in a range; the segmented control's box
+  with ghost square **−** / **+** icon buttons (`segmentHeight`) around the value and its
+  unit in 13 sp Geist Mono, `stepperValueWidth` wide. Clicks past either end do nothing.
 - **Switch** (`toggleSwitch`): 40×24 track, `colorPrimary` with a `colorOnPrimary` knob when on,
   `colorPressed` with a secondary knob when off.
 - **Status pill** (`statusPill`): dot + 12 sp SemiBold label in the status color on its tint.
@@ -277,7 +282,10 @@ up to `extractDialogWidth` (720 dp) over the log viewer.
   image; click places the caret; typing, Backspace, Delete, Enter (new line), arrows,
   Home/End (Shift extends) and Ctrl+Z work as in a text field.
 - 12 dp below: "Background" + segmented **Transparent · Dark · Light** + caption "Dark and
-  Light put a box behind each line." (one line). The choice stays for the next extract.
+  Light put a box behind each line." (one line).
+- 8 dp below: "Font size" + number stepper **− 14 px +** (10–24 px) + caption "A bigger
+  font makes a bigger image." Option labels sit in an `optionLabelWidth` column so the
+  controls line up. Both choices stay for the next extract.
 - The body scrolls; the buttons stay in view 24 dp below it: primary **Save image** (image
   icon), secondary **Edit** (pencil icon; hidden once editing), secondary **Cancel**.
 - Italic, colors and Default act on the selection, or on all the text with nothing
@@ -287,19 +295,22 @@ up to `extractDialogWidth` (720 dp) over the log viewer.
 
 What Extract image writes: a PNG players lay over game screenshots, styled like the in-game chat.
 
-- Font: **Arial Bold** 14 px, read from `%WINDIR%\Fonts\arialbd.ttf`; italic text uses
+- Font: **Arial Bold**, read from `%WINDIR%\Fonts\arialbd.ttf`; italic text uses
   **Arial Bold Italic** (`arialbi.ttf`). Bundled Go Bold / Go Bold Italic if those fail.
-- 18 px line height, 6 px padding, each line in its chat color with a 1 px black outline
-  (drawn at the 8 neighboring offsets) so it reads over any picture. Lines longer than
-  900 px wrap at spaces and keep their colors. The image is just big enough for the text.
-  Pixel values (not dp/sp) because they describe the file, not the UI; they live in
-  `internal/screenshot/render.go`.
+- Size: picked per extract, **10–24 px**, default **14 px** (the in-game chat). At 14 px:
+  18 px line height and a 900 px wrap; both scale with the font (line height rounded), so
+  lines wrap at the same words and the image grows with the text. Fixed at every size:
+  6 px padding, each line in its chat color with a 1 px black outline (drawn at the 8
+  neighboring offsets) so it reads over any picture. Wrapped lines keep their colors. The
+  image is just big enough for the text. Pixel values (not dp/sp) because they describe
+  the file, not the UI; they live in `internal/screenshot/render.go`. The PNG records its
+  font size (tEXt chunk `WorldKit:FontSize`).
 - **Markup** in a chat line: `/text/` → italic, slashes removed; `*text*` → the /me color
   (`colorChatEmote`), asterisks removed. Markers count only at word edges (`and/or`,
   `2 * 3` and a /me line's leading `* ` stay as typed).
 - **Backdrop**: Transparent draws nothing behind the text. Dark/Light draw one box per
-  drawn row: the row's 18 px height, from 5 px left of its text to 5 px right of it, rows
-  flush (a stepped shape for uneven lines), everything else transparent.
+  drawn row: the row's height (18 px at 14 px), from 5 px left of its text to 5 px right
+  of it, rows flush (a stepped shape for uneven lines), everything else transparent.
 
 ## Log Screenshots page
 
