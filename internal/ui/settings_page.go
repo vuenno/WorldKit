@@ -21,6 +21,7 @@ type SettingsPage struct {
 	openLogs         widget.Clickable
 	openScreenshots  widget.Clickable
 	dataDirForm      *dataDirForm
+	exportSettings   *exportSettings
 	startupSwitch    toggleSwitch
 	startupErrorText string
 }
@@ -29,8 +30,9 @@ type SettingsPage struct {
 // invalidate redraws the window when the folder picker closes.
 func NewSettingsPage(invalidate func()) *SettingsPage {
 	return &SettingsPage{
-		list:        widget.List{List: layout.List{Axis: layout.Vertical}},
-		dataDirForm: newDataDirForm(invalidate, buttonSecondary),
+		list:           widget.List{List: layout.List{Axis: layout.Vertical}},
+		dataDirForm:    newDataDirForm(invalidate, buttonSecondary),
+		exportSettings: newExportSettings(invalidate),
 	}
 }
 
@@ -59,6 +61,7 @@ func (p *SettingsPage) Layout(gtx layout.Context, theme *material.Theme, service
 		sections = append(sections, func(gtx layout.Context) layout.Dimensions { return p.layoutStartupSection(gtx, theme) })
 	}
 	sections = append(sections,
+		func(gtx layout.Context) layout.Dimensions { return p.exportSettings.Layout(gtx, theme, services) },
 		func(gtx layout.Context) layout.Dimensions { return p.layoutFilesSection(gtx, theme, services) },
 		styledLabel(theme, textSizeCaption, font.Normal, colorTextTertiary,
 			"WorldKit "+appVersion+" · Reads FiveM's chat store passively; never touches the game.").Layout,

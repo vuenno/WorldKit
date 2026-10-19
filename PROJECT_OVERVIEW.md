@@ -16,7 +16,10 @@ roleplay server on FiveM. Its first feature is **chat log capture**: saving the 
 which the game itself throws away on every reconnect, to plain text files on disk, and
 browsing them in a **log viewer** with name and kind filters. Selected lines can be
 **extracted** into transparent PNG "chat screenshots" (in-game look) for laying over game
-screenshots, kept on the **Log Screenshots** page.
+screenshots, kept on the **Log Screenshots** page. The **Screenshot Editor** does that
+laying over: pick a canvas size, add game screenshots and chat images as layers (move,
+resize, rotate, opacity, order) and export a PNG or JPEG at a chosen quality; exports are
+listed on the **Saved Screenshots** page.
 
 ## Current state
 
@@ -24,20 +27,23 @@ screenshots, kept on the **Log Screenshots** page.
 |------------------|------------------------------------------------------------------------|
 | App shell        | Done: undecorated window with WorldKit's own title bar (drag area, minimize/maximize/close), sidebar + page area |
 | Look             | Done: redesign from the **WorldKit Redesign** canvas — dark graphite ground, one orange accent, Geist + Geist Mono, line icons |
-| Sidebar          | Done: collapsible (232 ↔ 66 dp, 200 ms), brand, Logs / Log Screenshots, live capture status card, Settings at the bottom |
+| Sidebar          | Done: collapsible (232 ↔ 66 dp, 200 ms), brand, Logs / Log Screenshots, a divider, Screenshot Editor (badge while it has layers) / Saved Screenshots, live capture status card, Settings at the bottom |
+| Screenshot Editor| Done: canvas size from templates, a custom W×H, a preset or the first image; layers from game screenshots (multi-select Open dialog; PNG/JPEG/BMP/WebP ≤ 8192 px) and chat images (picker over Log Screenshots); drag to move with snapping to the canvas edges/center, corner/edge handles to resize (aspect kept, Shift free), rotation handle (Shift 15°), inspector fields (X/Y/W/H/rotation/opacity slider), Fit canvas / Actual size, duplicate, delete, hide, reorder (list buttons, `[` `]`, Ctrl+↑/↓), undo/redo, Ctrl+wheel zoom and pan, canvas background None/Black/White; **Close** returns to the template picker (asks first when there are layers); properties and layers sit in a compact 216 dp panel (24 dp controls) so the canvas gets the room |
+| Export           | Done: dialog with PNG (Lossless or Smaller file = reduced colors, 10–100 %) or JPEG (quality 10–100 %, default 92), presets (format + quality + canvas size, saved from the dialog, default in Settings), Save As (only the chosen type), rendered off the UI goroutine, toast with Show in folder |
+| Saved Screenshots| Done: every export (from `exports.json`) grouped by day: thumbnail, name, folder, size, format, file size; detail view; Show in folder; Delete (confirmed; only listed, unchanged files); missing files can be removed from the list |
 | Logs page        | Done: "Live now" card for the session being captured; sessions grouped Today / Yesterday / Earlier this week / month, each with start time, duration, characters, line count and a kind bar; search by character or date |
 | Log viewer       | Done: always-visible toolbar (find text, kind segments All/IC/me/do/b/PMs, Characters menu, timestamps switch), filter chips + Clear filters, timestamp column, drag/Shift+click/Ctrl+A/Esc selection, floating selection bar (Copy, **Extract image**, ×), toasts ("Screenshot saved · View" opens it) |
 | Extract dialog   | Done: **Extract image** opens a modal with a live preview, the Transparent/Dark/Light backdrop and a **Font size** stepper (10–24 px, default 14; the image grows with it); "Save as they are, or edit them first?" → **Edit** makes the preview itself editable: drag/Shift+click/Ctrl+A to select text on the image, **Italic**, a color picker (chat colors) and **Default** apply to it; click and type, Backspace/Delete/Enter, arrows/Home/End, Ctrl+Z undo |
 | Screenshot look  | Done: markup `/italic/` and `*action*` (in the /me color), markers removed; Dark/Light backdrops are a box behind each row of text, transparent elsewhere |
 | Log Screenshots  | Done: gallery grouped by day, checkerboard 1:1 previews, hover actions (Show in folder, Delete); detail view with a Transparent/Dark/Light preview (boxes behind the text rows) and details; delete with confirmation |
-| Settings page    | Done: capture status, FiveM data folder with **Browse…** (Windows folder dialog), start with Windows switch, logs/screenshots folders |
+| Settings page    | Done: capture status, FiveM data folder with **Browse…** (Windows folder dialog), start with Windows switch, Screenshot Editor card (export folder with Browse…, export presets: make default, delete), logs/screenshots folders |
 | Branding         | Done: logo in sidebar header, exe/taskbar icon                         |
 | Chat capture     | Done: background polling of FiveM's KVS, one `.txt` per session, crash-safe appends |
 | Chat parsing     | Done: `chatlog.Parse` → records with time, kind, speaker, text; `chatlog.Filter`; `chatlog.Summarize` |
 | First-run prompts| Done: FiveM data folder (only if not found; Browse… or type), start with Windows (asked once) |
-| Persistence      | `%AppData%\WorldKit\settings.json`, `%AppData%\WorldKit\logs\YYYY\MM\*.txt`, `%AppData%\WorldKit\screenshots\*.png`, `%AppData%\WorldKit\diagnostics\` (`app.log`, `crash-*.log`) |
+| Persistence      | `%AppData%\WorldKit\settings.json` (incl. export folder and presets), `%AppData%\WorldKit\exports.json` (the export list), `%AppData%\WorldKit\logs\YYYY\MM\*.txt`, `%AppData%\WorldKit\screenshots\*.png`, `%AppData%\WorldKit\diagnostics\` (`app.log`, `crash-*.log`); exports wherever the user saves them (default `Pictures\WorldKit`) |
 | Releases         | Done: manual **Release** workflow (`.github/workflows/release.yml`) runs the checks, builds with the typed version and publishes an Inno Setup installer under a new `v<version>` tag |
-| Tests            | Animation, chat archive/parser/filter/library/summary, KVS reader, capture service, settings, diagnostics, folder picker setup, screenshot render/font sizes/store (font size round trip)/markup/document edits/hit-testing/backdrop boxes, extract dialog and picture editor (lines, style, font size, keys, restyle, undo), number stepper, UI texts (days, durations, counts), filters, chat lines, selection menu placement, icons, gallery layout |
+| Tests            | Animation, chat archive/parser/filter/library/summary, KVS reader, capture service, settings, diagnostics, folder picker setup, screenshot render/font sizes/store (font size round trip)/markup/document edits/hit-testing/backdrop boxes, extract dialog and picture editor (lines, style, font size, keys, restyle, undo), number stepper, UI texts (days, durations, counts), filters, chat lines, selection menu placement, icons, gallery layout; compose (transform, hit-testing, resize/rotate incl. rotated, snapping, reorder, canvas resize, history, placement, linear-light blending, exact 1:1 pixels, missing source, all formats, quantizer alpha), exports index (add/list/missing/remove, delete only listed unchanged files), file dialogs (COM setup, extensions), settings presets; benchmarks for 4K render/encode |
 
 ## Architecture
 
@@ -51,14 +57,20 @@ main()  (-minimized flag)               cmd/worldkit/main.go
          └─ Shell                       internal/ui/app.go   sidebar | title bar over the page | prompt
              ├─ Sidebar                 internal/ui/sidebar.go  brand (move area), NavItems, captureCard, Settings
              ├─ titleBar                internal/ui/title_bar.go move area + caption buttons → window.Perform
-             ├─ page: LogsPage | ScreenshotsPage | SettingsPage
+             ├─ page: LogsPage | ScreenshotsPage | EditorPage | ExportsPage | SettingsPage
              │   ├─ LogsPage            internal/ui/logs_page.go  liveCard + sessionRows ──► logViewer
              │   │   ├─ loadSessionEntries: Library.Sessions + Records → chatlog.Summarize (backgroundLoad)
              │   │   └─ logViewer       internal/ui/log_viewer.go logFilters → chatLineList
              │   │       └─ selectionMenu → Extract image → extractDialog (preview via screenshot.Render, edits)
              │   │           → Save image → screenshot.Store.Save(lines, style) (background) → toast → View
              │   ├─ ScreenshotsPage     internal/ui/screenshots_page.go shotCards ──► screenshotView; shotDeletion
-             │   └─ SettingsPage        internal/ui/settings_page.go dataDirForm (Browse… → folderpicker)
+             │   ├─ EditorPage          internal/ui/editor_page.go templatePicker ──► workspace
+             │   │   ├─ editorDoc       compose.Composition + History, selection, images (imageLoader: decode → 2048 px RGBA → ImageOp)
+             │   │   ├─ canvasView      GPU preview (op.Affine per layer), gestures → compose.Moved/Resized/Rotated/Snapped
+             │   │   ├─ layerInspector, layerList, chatPicker (Log Screenshots as layers)
+             │   │   └─ exportDialog    Save As (filedialog) → compose.Export (CPU, linear light) → exports.Index.Add
+             │   ├─ ExportsPage         internal/ui/exports_page.go exportRows (lazy thumbnails) ──► exportView; shotDeletion
+             │   └─ SettingsPage        internal/ui/settings_page.go dataDirForm (Browse… → filedialog), exportSettings
              └─ prompt: dataDirPrompt (capture needs a folder) | startupPrompt (not answered yet)
 controls, text styles, icons            internal/ui/button.go, controls.go, text.go, icons.go
 theme tokens + fonts                    internal/ui/theme.go (mirrors DESIGN.md), fonts.go (embedded Geist)
@@ -67,7 +79,7 @@ assets.Logo(), assets.Fonts             assets/assets.go     embedded logo.png a
 
 The UI talks to domain code only through the small interfaces in `ui.Services`
 (`CaptureService`, `SettingsStore`, `LogLibrary`, `ScreenshotStore`, `StartupEntry`,
-`FolderPicker`); capture calls `window.Invalidate` when its status changes, and so does
+`FileDialogs`, `ExportList`, plus `DefaultExportDir`); capture calls `window.Invalidate` when its status changes, and so does
 `backgroundLoad` when a disk read finishes. `Run` also records the window handle
 (`app.Win32ViewEvent`) so the folder dialog is modal to WorldKit.
 
@@ -103,7 +115,10 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `internal/capture/`                    | Background `Service`: polling loop, data folder changes, `Status` |
 | `internal/settings/`                   | `settings.json` load + atomic save                          |
 | `internal/diagnostics/`                | `Start`: `slog` → `app.log`, crash output → `crash-*.log`; `End`/`Close` |
-| `internal/folderpicker/`               | Windows "Select folder" dialog (`IFileOpenDialog` via COM, no CGO) |
+| `internal/filedialog/`                 | Windows file dialogs via COM, no CGO: `PickFolder`, `OpenFiles` (multi-select), `Save` (one file type, extension enforced) |
+| `internal/compose/`                    | Screenshot Editor model: `Composition`/`Layer` (center-based), geometry.go (`Transform`, hit-testing, handles, `Resized`, `Rotated`, `Snapped`), `History` (undo/redo), placement.go, decode.go (`ReadSize`, `Decode`, `Downscale`), render.go + linear.go (CPU export in linear light), encode.go (`Format`, PNG/JPEG), quantize.go (median cut + dithering), `Export` |
+| `internal/exports/`                    | `Index`: `exports.json` list of exports; `List` marks missing/changed files; `Delete` only listed, unchanged files |
+| `internal/atomicfile/`                 | `Write`: temp file + sync + rename, for settings, screenshots, exports |
 | `internal/autostart/`                  | Start with Windows via the HKCU `Run` registry key          |
 | `internal/screenshot/`                 | `Render` (lines + `Style` → `Picture`, in-game look, backdrop and font size 10–24 px), `RowBoxes` (boxes of a saved image at its font size), layout.go (per-character placement, wrapping), picture.go (`PositionAt`, `CaretBounds`, `SelectionBounds`), `NewLine` / `ParseMarkup` (markup.go), `Document` (editable styled characters), Arial faces + cache (font.go), `Store` (save/list/load/delete in `screenshots\`; `Load` → `SavedImage` with its font size), pngtext.go (font size in a PNG tEXt chunk) |
 | `internal/ui/app.go`                   | Event loop (window events, maximize state, HWND), `Shell` (pages, prompts, View link) |
@@ -121,6 +136,17 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `internal/ui/picture_editor.go`        | `pictureEditor`: select, type and undo on the rendered preview image |
 | `internal/ui/screenshot_view.go`       | `screenshotView` (detail, backdrop boxes, details card), `backdropColor`, `shotDeletion` (confirm + delete) |
 | `internal/ui/settings_page.go`         | Settings page: `settingsCard`, `settingRow`, `pathRow`      |
+| `internal/ui/export_settings.go`       | Settings' Screenshot Editor card: export folder, presets    |
+| `internal/ui/editor_page.go`           | `EditorPage`: toolbar, workspace, adding images, shortcuts, `confirmPrompt`, `layoutEnabled` |
+| `internal/ui/editor_doc.go`            | `editorDoc`: composition, history, selection, decoded layer images |
+| `internal/ui/editor_canvas.go`         | `canvasView`: fit/zoom/pan, drawing layers, selection frame, guides, gestures, keys |
+| `internal/ui/editor_panels.go`         | `layerInspector` (fields, slider, buttons) and `layerList` (rows) |
+| `internal/ui/editor_templates.go`      | `templatePicker`: canvas size tiles, custom size, presets   |
+| `internal/ui/export_dialog.go`         | `exportDialog`: format/quality/preset, Save as preset, Save As + background export |
+| `internal/ui/chat_picker.go`           | `chatPicker`: pick Log Screenshots to add as layers         |
+| `internal/ui/exports_page.go`          | Saved Screenshots: `exportRow`, lazy thumbnails, `exportView` |
+| `internal/ui/image_loader.go`          | `imageLoader`: decode images off the UI goroutine, 2 at a time, cancellable |
+| `internal/ui/inputs.go`, `menu.go`     | `numberField`, `slider`; `dropdownMenu`                      |
 | `internal/ui/capture_ui.go`            | `ui.Services` + interfaces, status text, `dataDirForm` (Browse…), first-run prompts, `openFolder` |
 | `internal/ui/button.go`                | `button`: primary / secondary / ghost / danger / icon       |
 | `internal/ui/controls.go`              | Segmented control, switch, chip, status pill, badge, link, `surfaceBox`, `textField`, `hoverArea` |
@@ -146,9 +172,51 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 - **Gio over Fyne.** The dev machine has no C compiler and CGO is off. Fyne needs CGO + MinGW;
   Gio is pure Go on Windows, lightweight, and ships Material-style widgets.
 - **Windows only.** Product decision. No cross-platform code paths or resources.
-- **Logo resampled at runtime** (`golang.org/x/image/draw`, Catmull-Rom). Gio only scales
-  images linearly with no mipmaps, which looks jagged when shrinking. The PNG is 384 px:
-  enough for a 160 dp hero up to ~240% display scaling while keeping the exe small.
+- **Logo resampled at runtime** (`golang.org/x/image/draw`, Catmull-Rom) to its exact pixel
+  size, so it stays crisp. (An earlier note here said Gio has no mipmaps; Gio v0.10.3 does
+  mipmap `FilterLinear` images on D3D11 — `gpu.go` picks `FilterLinearMipmapLinear` and the
+  backend calls `GenerateMips` — so shrunken images are smooth, just softer than a CPU
+  resample.) The PNG is 384 px: enough for a 160 dp hero up to ~240% display scaling while
+  keeping the exe small.
+- **Screenshot Editor: GPU preview, CPU export.** The canvas draws each layer with Gio
+  (`op.Affine` + `paint.PushOpacity` only when faded), from a preview copy decoded once off
+  the UI goroutine and shrunk to ≤ 2048 px (Catmull-Rom; a premultiplied `*image.RGBA`, which
+  `paint.NewImageOp` uploads without a copy). The decoded original is dropped; export
+  re-decodes from the file. 2048 also keeps every texture under the D3D11 limits (an
+  oversized texture panics in Gio). Export (`compose.Render`) runs on the CPU at full size,
+  one layer at a time (peak ≈ canvas + one image: ~150 MB at 4K): Catmull-Rom scale into a
+  2 px transparent margin (soft rotated edges), then `draw.Transform` for rotation in
+  parallel horizontal bands; a layer at its real size on whole pixels is copied exactly, so
+  chat text keeps every pixel. Measured: 4K canvas with two full layers renders in ~0.35 s.
+  One `Layer.Transform` (center-based: translate · rotate · scale) drives both, so the file
+  matches the preview geometrically.
+- **Export blends in linear light**, like Gio's sRGB render target does on screen, so a 50 %
+  layer looks the same in the file as in the editor (white at 50 % over black = 188, not
+  128). Each premultiplied sRGB channel goes straight through a 256-entry table to 16-bit
+  linear (as the GPU samples it), opacity and Over are applied there, and a 4096-entry table
+  converts back. Gamma-space blending (`draw.Over`) was the alternative; it visibly
+  disagreed with the preview on faded layers and soft edges.
+- **Formats.** PNG lossless (stdlib, default compression; opaque images are written as RGB
+  automatically). PNG "Smaller file": our own median-cut palette (≤ 256 colors incl. alpha)
+  and Floyd–Steinberg dithering with a per-bin nearest-color cache (the stdlib dither
+  searches the whole palette per pixel: seconds at 4K); quality maps to 16–256 colors, below
+  50 % no dithering; fully transparent pixels get their own entry and no error diffusion
+  (diffusing alpha left blotches around soft edges). JPEG is always lossy (no lossless JPEG in
+  the stdlib, 4:2:0 fixed), quality 10–100, default 92, flattened over black.
+- **Exports are listed, not copied.** `exports.json` records each export's path, format,
+  size and the file's size + modification time; Saved Screenshots stats them on load. Delete
+  removes only a listed file that still matches (another file that took the name is never
+  deleted); missing ones can be removed from the list. Thumbnails are decoded only for rows
+  that are drawn, 2 at a time, kept in memory (≤ 128), never cached on disk.
+- **Save As offers only the chosen format** (one file type, extension enforced), so the
+  quality settings always match the file. The dialog opens in the last export folder, else
+  Settings' export folder, else `Pictures\WorldKit`.
+- **Presets** (settings.json) hold format, quality and canvas size. Saved from the export
+  dialog; usable as canvas sizes on the template screen and in the canvas menu (which also
+  makes the next export start with them); the Settings default is where the export dialog
+  starts the first time.
+- **No drag-and-drop or paste of images**: Gio on Windows delivers neither file drops nor
+  image clipboard data, so images come in through the Open dialog (multi-select).
 - **One-off tools via `go run module@version`**, not `go.mod` `tool` entries, to keep the module
   graph minimal (e.g. `go-winres` for the exe icon; the command is in `CLAUDE.md`).
 - **Chat comes from FiveM's KVS, read passively.** Community tools instead attach to FiveM's CEF
@@ -249,9 +317,9 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   `window.Perform`.
 - **Line icons are drawn from path strings** (`strokeIcon`), not Material icons: they match
   the design's stroke style and need no icon dependency.
-- **Folder picker via COM** (`internal/folderpicker`): the modern Explorer dialog
-  (`IFileOpenDialog`, folder mode) through `x/sys/windows` syscalls, run on its own locked OS
-  thread off the UI goroutine. No new dependency and no CGO; the older `SHBrowseForFolder`
+- **File dialogs via COM** (`internal/filedialog`, formerly `folderpicker`): the modern
+  Explorer dialogs (`IFileOpenDialog` in folder or multi-select mode, `IFileSaveDialog`)
+  through `x/sys/windows` syscalls, run on a locked OS thread off the UI goroutine. No new dependency and no CGO; the older `SHBrowseForFolder`
   tree dialog was the alternative.
 - **Session list parses every session** to show characters, duration and kinds
   (`chatlog.Summarize`), off the UI goroutine. Fine for hundreds of sessions; cache summaries
@@ -310,6 +378,12 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   siblings out (this shrank the screenshot preview). Give captions in tight rows `MaxLines = 1`.
 - **Popovers use `op.Defer`** (the Characters menu) so they draw above later siblings, with a
   transparent window-sized layer under them that closes them on an outside click.
+- **Keep `paint.ImageOp`s, never make them in `Layout`.** Gio keys GPU textures by the op's
+  handle, so a new op every frame re-uploads every frame; it also frees textures not drawn in
+  a frame, so keep the pixels alive with the op (`imageVersion`).
+- **Pointer positions are local** to the handler's area: in headless tests, add the area's
+  window offset before queuing events (`canvasView` sits below the toolbar, right of the
+  sidebar).
 - **Start with Windows registers the running exe.** Enabling it from `go run` registers a temp
   build; use the release build.
 
@@ -355,3 +429,8 @@ graphify explain "Sidebar"
 - Tray icon so WorldKit can keep capturing with its window closed.
 - Bring back more nav destinations when they have real content.
 - Persist sidebar expanded/collapsed state and last page between launches.
+- Screenshot Editor: drag to reorder layers, snapping to other layers' edges, paste/copy
+  images (Win32 clipboard), save and reopen work in progress (a small project JSON
+  referencing the source files), crop, a **Use in editor** button on a Log Screenshot,
+  any background color, editing presets in Settings, an estimated file size in the export
+  dialog, per-pixel hit-testing (clicks on transparent parts of a chat image select it today).

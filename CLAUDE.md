@@ -34,22 +34,27 @@ code, whenever the change is worth noting:
   icons and the title bar are WorldKit's own (`internal/ui`).
 - **Fonts:** Geist and Geist Mono, embedded from `assets/fonts` (OFL-1.1, keep `OFL.txt`
   next to them). The text shaper loads only these; never fall back to system fonts.
-- `golang.org/x/image` for high-quality image resampling (Gio only scales linearly).
+- `golang.org/x/image` for high-quality image resampling (`draw.CatmullRom`), the editor's
+  rotated/scaled export (`draw.Transform`) and its BMP/WebP decoders.
 - `github.com/syndtr/goleveldb` (pulls in `github.com/golang/snappy`) to read FiveM's LevelDB
   key-value store, where GTA World keeps its chat log. Pure Go, read-only use, on a copy only.
 - `golang.org/x/sys/windows` (already required by Gio) for the registry (start with Windows) and
   exclusive file handles (single-instance archive lock).
 - **Platform:** Windows only (amd64). Don't add code paths, build tags or resources for other OSes/arches.
 - **Never open FiveM's live data.** Copy `%AppData%\CitizenFX\kvs` to a temp folder and read the copy.
-- **User data** lives in `os.UserConfigDir()\WorldKit` (`%AppData%\WorldKit`): `settings.json`
-  `logs\` and `screenshots\`. Chat logs are stored raw (one `.txt` per session) and parsed on
+- **User data** lives in `os.UserConfigDir()\WorldKit` (`%AppData%\WorldKit`): `settings.json`,
+  `exports.json`, `logs\` and `screenshots\`. Chat logs are stored raw (one `.txt` per session) and parsed on
   read; never rewrite or reformat them in place. Screenshots are PNGs WorldKit renders itself
   (`internal/screenshot`, pure Go via `golang.org/x/image/font`, no GPU); deletes only ever
-  touch that folder. Their fonts, Arial Bold and Arial Bold Italic (`arialbd.ttf`,
+  touch that folder, or a Screenshot Editor export that `exports.json` lists and that is
+  unchanged since export (same size and modification time, `exports.Index.Delete`). Exports
+  are written where the user picks (default `Pictures\WorldKit`) and never copied.
+  Screenshot fonts, Arial Bold and Arial Bold Italic (`arialbd.ttf`,
   `arialbi.ttf`), are read from `%WINDIR%\Fonts` (Go Bold / Go Bold Italic as fallback);
   never bundle them (their license forbids redistribution). Chat markup (`/italic/`,
   `*action*`) is parsed once into styled characters (`screenshot.Document`); edits change
   those characters, never the stored log text.
+- Write user files through `internal/atomicfile` (temp file + rename), never in place.
 - **Diagnostics** go to `%AppData%\WorldKit\diagnostics\` (`internal/diagnostics`, started in
   `run.go`): `slog` output in `app.log` (previous run: `app.previous.log`) and unrecovered
   panics/fatal errors in `crash-<UTC start time>.log` via `runtime/debug.SetCrashOutput`.
@@ -119,8 +124,14 @@ assets/              embedded files (//go:embed). logo.png (384×384, transparen
   `titleBar`; drag areas use `moveArea` (`system.ActionInputOp(system.ActionMove)`). Never put a
   clickable inside a move area: Windows takes those clicks.
 - Icons are `strokeIcon` path strings in `internal/ui/icons.go`; add new ones there.
-- Windows APIs without a Go wrapper (e.g. the folder dialog) are called through COM/syscalls
-  with `golang.org/x/sys/windows` in their own `internal/<name>` package, never CGO.
+- Windows APIs without a Go wrapper (e.g. the file dialogs, `internal/filedialog`) are called
+  through COM/syscalls with `golang.org/x/sys/windows` in their own `internal/<name>` package,
+  never CGO.
+- Images shown by Gio: make the `paint.ImageOp` once (from an `*image.RGBA`, which Gio
+  uploads without a copy) and keep it with its pixels; never `NewImageOp` in `Layout`. Cap
+  textures at `previewMaxSide` (2048): an oversized texture panics in Gio's D3D11 backend.
+- Several decodes at once go through `imageLoader` (`internal/ui/image_loader.go`, a small
+  worker pool with a context); single reads through `backgroundLoad`.
 - Animations: use `expandAnimation` (or a sibling type in `animation.go`) driven by `gtx.Now`;
   request frames with `gtx.Execute(op.InvalidateCmd{})` only while animating.
 - Constraints gotcha: `layout.W`/`E` keep `Min.Y` (and `N`/`S` keep `Min.X`). Clear the other

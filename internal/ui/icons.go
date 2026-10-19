@@ -45,6 +45,20 @@ const (
 	iconItalic       strokeIcon = "M10 4 H19 M5 20 H14 M15 4 L9 20"
 	iconMinus        strokeIcon = "M5 12 H19"
 	iconPlus         strokeIcon = "M12 5 V19 M5 12 H19"
+	iconLayers       strokeIcon = "M12 3 L21 8 L12 13 L3 8 Z M3 12 L12 17 L21 12 M3 16 L12 21 L21 16"
+	iconImages       strokeIcon = "R 7 3 14 14 2 O 12 8 1.5 M21 13 L17 9 L10 17 M3 7 V19 Q3 21 5 21 H17"
+	iconChat         strokeIcon = "M4 5 Q4 3 6 3 H18 Q20 3 20 5 V15 Q20 17 18 17 H9 L4 21 Z M8 8 H16 M8 12 H13"
+	iconUndo         strokeIcon = "M9 14 L4 9 L9 4 M4 9 H15 Q20 9 20 14 Q20 19 15 19 H11"
+	iconRedo         strokeIcon = "M15 14 L20 9 L15 4 M20 9 H9 Q4 9 4 14 Q4 19 9 19 H13"
+	iconExport       strokeIcon = "M12 3 V15 M7 10 L12 15 L17 10 M4 17 V19 Q4 21 6 21 H18 Q20 21 20 19 V17"
+	iconFit          strokeIcon = "M4 9 V4 H9 M15 4 H20 V9 M20 15 V20 H15 M9 20 H4 V15"
+	iconEye          strokeIcon = "M2 12 Q12 2 22 12 Q12 22 2 12 Z O 12 12 3"
+	iconEyeOff       strokeIcon = "M2 12 Q12 2 22 12 Q12 22 2 12 Z O 12 12 3 M4 4 L20 20"
+	iconLock         strokeIcon = "R 5 11 14 10 2 M8 11 V8 Q8 4 12 4 Q16 4 16 8 V11"
+	iconUnlock       strokeIcon = "R 5 11 14 10 2 M8 11 V8 Q8 4 12 4 Q16 4 16 6"
+	iconRotate       strokeIcon = "M21 4 V10 H15 M21 10 Q18 4 12 4 Q4 4 4 12 Q4 20 12 20 Q18 20 20 15"
+	iconChevronUp    strokeIcon = "M6 15 L12 9 L18 15"
+	iconAlert        strokeIcon = "M12 3 L22 20 H2 Z M12 9 V14 M12 17 V17.5"
 )
 
 // iconStrokeWidth is the stroke width on the 24-unit grid.

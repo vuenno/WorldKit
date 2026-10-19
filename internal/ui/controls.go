@@ -19,9 +19,10 @@ import (
 
 // segmentedControl picks exactly one of a few options, shown side by side.
 type segmentedControl struct {
-	labels   []string
-	clicks   []widget.Clickable
-	selected int
+	labels    []string
+	clicks    []widget.Clickable
+	selected  int
+	isCompact bool // for the editor's panels: shorter, caption text, segments share the width
 }
 
 func newSegmentedControl(labels ...string) *segmentedControl {
@@ -43,21 +44,33 @@ func (s *segmentedControl) Update(gtx layout.Context) bool {
 func (s *segmentedControl) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	children := make([]layout.FlexChild, len(s.labels))
 	for i := range s.labels {
-		children[i] = layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return s.layoutSegment(gtx, theme, i)
-		})
+		segment := func(gtx layout.Context) layout.Dimensions { return s.layoutSegment(gtx, theme, i) }
+		children[i] = layout.Rigid(segment)
+		if s.isCompact {
+			children[i] = layout.Flexed(1, segment)
+		}
 	}
-	return surfaceBox{fill: colorSurface, border: colorDivider, radius: radiusControl, padding: segmentedPadding}.Layout(gtx,
-		func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, children...)
-		})
+	box := surfaceBox{fill: colorSurface, border: colorDivider, radius: radiusControl, padding: segmentedPadding}
+	if s.isCompact {
+		box.radius = radiusMenu
+		gtx.Constraints.Min.X = gtx.Constraints.Max.X
+	}
+	return box.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		if s.isCompact {
+			gtx.Constraints.Min.X = gtx.Constraints.Max.X // the box's Stack clears Min
+		}
+		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, children...)
+	})
 }
 
 func (s *segmentedControl) layoutSegment(gtx layout.Context, theme *material.Theme, index int) layout.Dimensions {
 	click := &s.clicks[index]
 	isSelected := index == s.selected
 	return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		height := gtx.Dp(segmentHeight)
+		height, width, textSize, padding := gtx.Dp(segmentHeight), 0, textSizeSmall, spacingMedium
+		if s.isCompact {
+			height, width, textSize, padding = gtx.Dp(panelSegmentHeight), gtx.Constraints.Min.X, textSizeCaption, spacingSmall
+		}
 		return layout.Stack{Alignment: layout.Center}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 				size := gtx.Constraints.Min
@@ -70,10 +83,10 @@ func (s *segmentedControl) layoutSegment(gtx layout.Context, theme *material.The
 				return layout.Dimensions{Size: size}
 			}),
 			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-				gtx.Constraints.Min = image.Pt(0, height)
-				return layout.Inset{Left: spacingMedium, Right: spacingMedium}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min = image.Pt(width, height)
+				return layout.Inset{Left: padding, Right: padding}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						label := material.Label(theme, textSizeSmall, s.labels[index])
+						label := material.Label(theme, textSize, s.labels[index])
 						label.Font.Weight = font.Medium
 						label.MaxLines = 1
 						label.Color = colorTextSecondary
@@ -91,6 +104,7 @@ func (s *segmentedControl) layoutSegment(gtx layout.Context, theme *material.The
 // numberStepper picks a whole number in min..max with − and + buttons around its value.
 type numberStepper struct {
 	value, min, max int
+	increment       int    // how far one click moves the value; zero: 1
 	unit            string // shown after the value, e.g. "px"
 	decrease        widget.Clickable
 	increase        widget.Clickable
@@ -114,6 +128,9 @@ func (s *numberStepper) Update(gtx layout.Context) bool {
 
 // step moves the value by delta, staying within min..max.
 func (s *numberStepper) step(delta int) {
+	if s.increment > 0 {
+		delta *= s.increment
+	}
 	s.value = max(s.min, min(s.value+delta, s.max))
 }
 

@@ -8,8 +8,10 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"path/filepath"
+	"slices"
 	"sync"
+
+	"world-kit/internal/atomicfile"
 )
 
 // Settings are the preferences remembered between launches.
@@ -18,6 +20,59 @@ type Settings struct {
 	FiveMDataDir string `json:"fivemDataDir,omitempty"`
 	// HasAnsweredStartupPrompt is true once the user chose whether WorldKit starts with Windows.
 	HasAnsweredStartupPrompt bool `json:"hasAnsweredStartupPrompt"`
+	// ExportDir is where the editor's Save As dialog opens; empty means Pictures\WorldKit.
+	ExportDir string `json:"exportDir,omitempty"`
+	// LastExportDir is the folder the last export went to, where the next one starts.
+	LastExportDir string `json:"lastExportDir,omitempty"`
+	// ExportPresets are the user's saved export choices, in the order they were saved.
+	ExportPresets []ExportPreset `json:"exportPresets,omitempty"`
+	// DefaultPreset names the preset the export dialog starts with; empty: PNG, lossless.
+	DefaultPreset string `json:"defaultExportPreset,omitempty"`
+}
+
+// ExportPreset is a saved combination of file format, quality and canvas size.
+type ExportPreset struct {
+	Name       string `json:"name"`
+	Format     string `json:"format"` // "png" or "jpeg"
+	Quality    int    `json:"quality,omitempty"`
+	IsLossless bool   `json:"lossless,omitempty"` // PNG only
+	Width      int    `json:"width"`
+	Height     int    `json:"height"`
+}
+
+// Preset returns the preset called name.
+func (s Settings) Preset(name string) (ExportPreset, bool) {
+	for _, preset := range s.ExportPresets {
+		if preset.Name == name {
+			return preset, true
+		}
+	}
+	return ExportPreset{}, false
+}
+
+// SavePreset adds preset, replacing one with the same name.
+func (s *Settings) SavePreset(preset ExportPreset) {
+	for i := range s.ExportPresets {
+		if s.ExportPresets[i].Name == preset.Name {
+			s.ExportPresets[i] = preset
+			return
+		}
+	}
+	s.ExportPresets = append(s.ExportPresets, preset)
+}
+
+// DeletePreset removes the preset called name, and makes it no longer the default.
+func (s *Settings) DeletePreset(name string) {
+	kept := s.ExportPresets[:0:0]
+	for _, preset := range s.ExportPresets {
+		if preset.Name != name {
+			kept = append(kept, preset)
+		}
+	}
+	s.ExportPresets = kept
+	if s.DefaultPreset == name {
+		s.DefaultPreset = ""
+	}
 }
 
 // Store holds the current settings and writes every change to disk. Safe for concurrent use.
@@ -51,14 +106,14 @@ func Open(path string) (*Store, error) {
 func (s *Store) Get() Settings {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.current
+	return s.current.clone()
 }
 
 // Update applies change and saves the result. On a save error the settings stay unchanged.
 func (s *Store) Update(change func(*Settings)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	next := s.current
+	next := s.current.clone()
 	change(&next)
 	if err := writeFileAtomically(s.path, next); err != nil {
 		return err
@@ -67,29 +122,21 @@ func (s *Store) Update(change func(*Settings)) error {
 	return nil
 }
 
-// writeFileAtomically writes to a temporary file first, so a crash mid-write
-// leaves the previous settings file intact instead of a half-written one.
+// writeFileAtomically saves through a temporary file, so a crash mid-write leaves the
+// previous settings file intact instead of a half-written one.
 func writeFileAtomically(path string, settings Settings) error {
 	content, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode settings: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("save settings %q: %w", path, err)
-	}
-	temp, err := os.CreateTemp(filepath.Dir(path), "settings-*.tmp")
-	if err != nil {
-		return fmt.Errorf("save settings %q: %w", path, err)
-	}
-	defer os.Remove(temp.Name()) // fails harmlessly once the rename has moved it
-	_, writeErr := temp.Write(content)
-	syncErr := temp.Sync()
-	closeErr := temp.Close()
-	if err := errors.Join(writeErr, syncErr, closeErr); err != nil {
-		return fmt.Errorf("save settings %q: %w", path, err)
-	}
-	if err := os.Rename(temp.Name(), path); err != nil {
-		return fmt.Errorf("save settings %q: %w", path, err)
+	if err := atomicfile.Write(path, content); err != nil {
+		return fmt.Errorf("save settings: %w", err)
 	}
 	return nil
+}
+
+// clone copies s so callers can change its presets without touching the stored ones.
+func (s Settings) clone() Settings {
+	s.ExportPresets = slices.Clone(s.ExportPresets)
+	return s
 }

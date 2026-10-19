@@ -20,7 +20,11 @@ import (
 type NavItem struct {
 	Label string
 	Icon  strokeIcon
-	click widget.Clickable
+	// StartsGroup draws a divider above the item, separating it from the ones before.
+	StartsGroup bool
+	// HasBadge shows a small orange dot on the icon: work in progress on that page.
+	HasBadge bool
+	click    widget.Clickable
 }
 
 // NewNavItem creates a sidebar destination.
@@ -100,6 +104,11 @@ func (s *Sidebar) layoutContent(gtx layout.Context, theme *material.Theme, statu
 		if item == s.bottomItem {
 			continue
 		}
+		if item.StartsGroup {
+			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Top: spacingSmall - spacingTiny, Bottom: spacingSmall, Left: navItemPaddingX, Right: navItemPaddingX}.Layout(gtx, horizontalDivider)
+			}))
+		}
 		children = append(children, s.navRowChild(theme, item, labelOpacity), layout.Rigid(layout.Spacer{Height: spacingTiny}.Layout))
 	}
 	children = append(children,
@@ -116,7 +125,7 @@ func (s *Sidebar) layoutContent(gtx layout.Context, theme *material.Theme, statu
 }
 
 func (s *Sidebar) navRowChild(theme *material.Theme, item *NavItem, labelOpacity float32) layout.FlexChild {
-	row := navRow{click: &item.click, icon: item.Icon, label: item.Label, labelOpacity: labelOpacity, isActive: item == s.selected}
+	row := navRow{click: &item.click, icon: item.Icon, label: item.Label, labelOpacity: labelOpacity, isActive: item == s.selected, hasBadge: item.HasBadge}
 	return layout.Rigid(func(gtx layout.Context) layout.Dimensions { return row.Layout(gtx, theme) })
 }
 
@@ -237,6 +246,7 @@ type navRow struct {
 	label        string
 	labelOpacity float32
 	isActive     bool
+	hasBadge     bool
 }
 
 func (r navRow) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensions {
@@ -274,7 +284,13 @@ func (r navRow) layoutIconAndLabel(gtx layout.Context, theme *material.Theme) la
 		row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}
 		return row.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return r.icon.Layout(gtx, iconSize, r.iconColor())
+				dims := r.icon.Layout(gtx, iconSize, r.iconColor())
+				if r.hasBadge {
+					side := gtx.Dp(navBadgeSize)
+					badge := image.Rect(dims.Size.X-side/2, -side/2, dims.Size.X+side/2, side/2)
+					paint.FillShape(gtx.Ops, colorPrimary, clip.Ellipse(badge).Op(gtx.Ops))
+				}
+				return dims
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				if r.labelOpacity == 0 {

@@ -47,12 +47,16 @@ type Shell struct {
 	services        Services
 	logsItem        *NavItem
 	screenshotsItem *NavItem
+	editorItem      *NavItem
+	exportsItem     *NavItem
 	settingsItem    *NavItem
 	shownItem       *NavItem
 	sidebar         *Sidebar
 	titleBar        *titleBar
 	logsPage        *LogsPage
 	screenshotsPage *ScreenshotsPage
+	editorPage      *EditorPage
+	exportsPage     *ExportsPage
 	settingsPage    *SettingsPage
 	dataDirPrompt   *dataDirPrompt
 	startupPrompt   *startupPrompt
@@ -64,18 +68,26 @@ type Shell struct {
 func NewShell(services Services, invalidate func(), perform func(system.Action)) *Shell {
 	logsItem := NewNavItem("Logs", iconFileText)
 	screenshotsItem := NewNavItem("Log Screenshots", iconImage)
+	editorItem := NewNavItem("Screenshot Editor", iconLayers)
+	editorItem.StartsGroup = true // making chat images above, using them below
+	exportsItem := NewNavItem("Saved Screenshots", iconImages)
 	settingsItem := NewNavItem("Settings", iconSliders)
 	settingsPage := NewSettingsPage(invalidate)
 	settingsPage.SyncStartupSwitch(services.Startup)
+	mainItems := []*NavItem{logsItem, screenshotsItem, editorItem, exportsItem}
 	return &Shell{
 		services:        services,
 		logsItem:        logsItem,
 		screenshotsItem: screenshotsItem,
+		editorItem:      editorItem,
+		exportsItem:     exportsItem,
 		settingsItem:    settingsItem,
-		sidebar:         NewSidebar(NewLogo(assets.Logo()), []*NavItem{logsItem, screenshotsItem}, settingsItem),
+		sidebar:         NewSidebar(NewLogo(assets.Logo()), mainItems, settingsItem),
 		titleBar:        &titleBar{perform: perform},
 		logsPage:        NewLogsPage(invalidate),
 		screenshotsPage: NewScreenshotsPage(invalidate),
+		editorPage:      NewEditorPage(invalidate),
+		exportsPage:     NewExportsPage(invalidate),
 		settingsPage:    settingsPage,
 		dataDirPrompt:   &dataDirPrompt{form: newDataDirForm(invalidate, buttonPrimary)},
 		startupPrompt:   &startupPrompt{},
@@ -88,6 +100,10 @@ func (s *Shell) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensi
 		s.settingsPage.SyncStartupSwitch(s.services.Startup)
 	}
 	s.followViewShotLink(gtx)
+	if s.exportsPage.OpenEditorClicked(gtx) {
+		s.sidebar.Select(s.editorItem)
+	}
+	s.editorItem.HasBadge = s.editorPage.HasWork()
 	paint.Fill(gtx.Ops, colorAppBackground)
 	dims := layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -129,6 +145,10 @@ func (s *Shell) layoutPage(gtx layout.Context, theme *material.Theme) layout.Dim
 		return s.settingsPage.Layout(gtx, theme, s.services)
 	case s.screenshotsItem:
 		return s.screenshotsPage.Layout(gtx, theme, s.services)
+	case s.editorItem:
+		return s.editorPage.Layout(gtx, theme, s.services)
+	case s.exportsItem:
+		return s.exportsPage.Layout(gtx, theme, s.services)
 	}
 	return s.logsPage.Layout(gtx, theme, s.services)
 }
@@ -140,6 +160,8 @@ func (s *Shell) refreshPage(item *NavItem) {
 		s.logsPage.Reload(s.services.Logs)
 	case s.screenshotsItem:
 		s.screenshotsPage.Reload(s.services.Screenshots)
+	case s.exportsItem:
+		s.exportsPage.Reload(s.services.Exports)
 	}
 }
 

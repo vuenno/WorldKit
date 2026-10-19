@@ -9,12 +9,14 @@ import (
 
 	"gioui.org/app"
 	"gioui.org/unit"
+	"golang.org/x/sys/windows"
 
 	"world-kit/internal/autostart"
 	"world-kit/internal/capture"
 	"world-kit/internal/chatlog"
 	"world-kit/internal/diagnostics"
-	"world-kit/internal/folderpicker"
+	"world-kit/internal/exports"
+	"world-kit/internal/filedialog"
 	"world-kit/internal/screenshot"
 	"world-kit/internal/settings"
 	"world-kit/internal/ui"
@@ -61,9 +63,22 @@ func run(isMinimized bool) (runErr error) {
 
 	services := newServices(captureService, store)
 	services.Logs = chatlog.NewLibrary(archiveDir)
-	services.Folders = folderpicker.Dialog{}
+	services.Files = filedialog.Dialog{}
 	services.Screenshots = screenshot.NewStore(filepath.Join(dataDir, "screenshots"))
+	services.Exports = exports.Open(filepath.Join(dataDir, "exports.json"))
+	services.DefaultExportDir = defaultExportDir()
 	return ui.Run(window, services)
+}
+
+// defaultExportDir is Pictures\WorldKit, where exports go until Settings says otherwise.
+func defaultExportDir() string {
+	pictures, err := windows.KnownFolderPath(windows.FOLDERID_Pictures, 0)
+	if err != nil {
+		slog.Warn("find Pictures folder", "error", err)
+		home, _ := os.UserHomeDir() // empty on error: the Save dialog then opens where it last was
+		pictures = filepath.Join(home, "Pictures")
+	}
+	return filepath.Join(pictures, appName)
 }
 
 func newWindow(isMinimized bool) *app.Window {

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"image"
 	"image/color"
 	"log/slog"
@@ -13,6 +14,8 @@ import (
 	"gioui.org/op/paint"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
+
+	"world-kit/internal/exports"
 )
 
 // viewOutcome tells the screenshots page what happened in the open screenshot.
@@ -247,11 +250,11 @@ func (d *shotDeletion) Ask(path string) {
 }
 
 // Update handles the dialog and reports whether a screenshot was deleted.
-func (d *shotDeletion) Update(gtx layout.Context, store ScreenshotStore) bool {
+func (d *shotDeletion) Update(gtx layout.Context, files fileDeleter) bool {
 	if result, ok := d.deleter.Result(); ok {
 		if result.err != nil {
-			slog.Error("delete chat screenshot", "path", d.path, "error", result.err)
-			d.errText = "Couldn't delete this screenshot."
+			slog.Error("delete screenshot", "path", d.path, "error", result.err)
+			d.errText = deleteErrorText(result.err)
 			return false
 		}
 		d.path = ""
@@ -262,7 +265,7 @@ func (d *shotDeletion) Update(gtx layout.Context, store ScreenshotStore) bool {
 	}
 	if d.confirm.Clicked(gtx) && d.path != "" && !d.deleter.IsLoading() {
 		path := d.path
-		d.deleter.Start(func() (struct{}, error) { return struct{}{}, store.Delete(path) })
+		d.deleter.Start(func() (struct{}, error) { return struct{}{}, files.Delete(path) })
 	}
 	return false
 }
@@ -298,4 +301,17 @@ func revealFile(path string) {
 	if err := exec.Command("explorer.exe", "/select,", path).Start(); err != nil {
 		slog.Error("show file in folder", "path", path, "error", err)
 	}
+}
+
+// fileDeleter deletes one of the files it manages: chat screenshots or exports.
+type fileDeleter interface {
+	Delete(path string) error
+}
+
+// deleteErrorText explains a failed delete.
+func deleteErrorText(err error) string {
+	if errors.Is(err, exports.ErrChanged) {
+		return "This file changed since it was exported, so WorldKit won't delete it. Remove it from the list instead."
+	}
+	return "Couldn't delete this screenshot."
 }
