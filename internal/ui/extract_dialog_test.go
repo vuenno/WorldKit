@@ -145,3 +145,33 @@ func TestFittedSize(t *testing.T) {
 		}
 	}
 }
+
+func TestExtractDialogStyleFontSize(t *testing.T) {
+	d := newExtractDialog(func() {})
+	if got := d.Style().FontSize; got != screenshot.DefaultFontSize {
+		t.Errorf("default Style().FontSize = %d, want %d", got, screenshot.DefaultFontSize)
+	}
+	d.fontSize.step(4)
+	if got := d.Style().FontSize; got != screenshot.DefaultFontSize+4 {
+		t.Errorf("Style().FontSize after +4 = %d, want %d", got, screenshot.DefaultFontSize+4)
+	}
+}
+
+func TestNumberStepperStaysInRange(t *testing.T) {
+	tests := []struct {
+		start, delta, want int
+	}{
+		{14, 1, 15},
+		{14, -1, 13},
+		{24, 1, 24},
+		{10, -1, 10},
+		{12, 100, 24},
+	}
+	for _, test := range tests {
+		s := newNumberStepper(test.start, 10, 24, "px")
+		s.step(test.delta)
+		if s.value != test.want {
+			t.Errorf("%d%+d = %d, want %d", test.start, test.delta, s.value, test.want)
+		}
+	}
+}

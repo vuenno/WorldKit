@@ -3,7 +3,6 @@ package ui
 import (
 	"errors"
 	"fmt"
-	"image"
 	"log/slog"
 	"os/exec"
 
@@ -47,7 +46,7 @@ type LogLibrary interface {
 type ScreenshotStore interface {
 	Save(lines []screenshot.Line, style screenshot.Style) (screenshot.Shot, error)
 	List() ([]screenshot.Shot, error)
-	Load(path string) (image.Image, error)
+	Load(path string) (screenshot.SavedImage, error)
 	Delete(path string) error
 	Dir() string // the folder screenshots are saved in
 }

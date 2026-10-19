@@ -3,6 +3,7 @@ package ui
 import (
 	"image"
 	"image/color"
+	"strconv"
 
 	"gioui.org/font"
 	"gioui.org/io/event"
@@ -85,6 +86,52 @@ func (s *segmentedControl) layoutSegment(gtx layout.Context, theme *material.The
 			}),
 		)
 	})
+}
+
+// numberStepper picks a whole number in min..max with − and + buttons around its value.
+type numberStepper struct {
+	value, min, max int
+	unit            string // shown after the value, e.g. "px"
+	decrease        widget.Clickable
+	increase        widget.Clickable
+}
+
+func newNumberStepper(value, min, max int, unit string) *numberStepper {
+	return &numberStepper{value: value, min: min, max: max, unit: unit}
+}
+
+// Update handles clicks and reports whether the value changed.
+func (s *numberStepper) Update(gtx layout.Context) bool {
+	old := s.value
+	if s.decrease.Clicked(gtx) {
+		s.step(-1)
+	}
+	if s.increase.Clicked(gtx) {
+		s.step(1)
+	}
+	return s.value != old
+}
+
+// step moves the value by delta, staying within min..max.
+func (s *numberStepper) step(delta int) {
+	s.value = max(s.min, min(s.value+delta, s.max))
+}
+
+func (s *numberStepper) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensions {
+	stepButton := func(click *widget.Clickable, icon strokeIcon) layout.FlexChild {
+		return layout.Rigid(iconButton(click, icon).withKind(buttonGhost).withHeight(segmentHeight).Widget(theme))
+	}
+	return surfaceBox{fill: colorSurface, border: colorDivider, radius: radiusControl, padding: segmentedPadding}.Layout(gtx,
+		func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+				stepButton(&s.decrease, iconMinus),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min = image.Pt(gtx.Dp(stepperValueWidth), 0)
+					return layout.Center.Layout(gtx, monoText(theme, textSizeSmall, strconv.Itoa(s.value)+" "+s.unit).Layout)
+				}),
+				stepButton(&s.increase, iconPlus),
+			)
+		})
 }
 
 // toggleSwitch is an on/off switch: an orange track while on.

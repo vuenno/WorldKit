@@ -1,6 +1,7 @@
 package screenshot
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"image"
@@ -53,7 +54,7 @@ func (s *Store) Save(lines []Line, style Style) (Shot, error) {
 	if err != nil {
 		return Shot{}, err
 	}
-	if err := writePNG(path, picture.Image); err != nil {
+	if err := writePNG(path, picture); err != nil {
 		return Shot{}, err
 	}
 	return Shot{Path: path, Saved: saved}, nil
@@ -76,17 +77,21 @@ func (s *Store) freePath(saved time.Time) (string, error) {
 	}
 }
 
-// writePNG writes img to a temporary file first, so a crash never leaves a half-written
-// screenshot under its final name.
-func writePNG(path string, img image.Image) error {
+// writePNG writes picture to a temporary file first, so a crash never leaves a
+// half-written screenshot under its final name.
+func writePNG(path string, picture *Picture) error {
+	data, err := encodePNG(picture.Image, picture.FontSize)
+	if err != nil {
+		return fmt.Errorf("encode screenshot %q: %w", path, err)
+	}
 	file, err := os.CreateTemp(filepath.Dir(path), "saving-*.tmp")
 	if err != nil {
 		return fmt.Errorf("create screenshot file: %w", err)
 	}
 	tempPath := file.Name()
-	encodeErr := png.Encode(file, img)
+	_, writeErr := file.Write(data)
 	closeErr := file.Close()
-	if err := errors.Join(encodeErr, closeErr); err != nil {
+	if err := errors.Join(writeErr, closeErr); err != nil {
 		// The temp file is useless now; failing to remove it only leaves a stray .tmp.
 		_ = os.Remove(tempPath)
 		return fmt.Errorf("write screenshot %q: %w", path, err)
@@ -143,18 +148,23 @@ func savedFromName(name string) (time.Time, bool) {
 	return saved, err == nil
 }
 
+// SavedImage is a decoded screenshot file and the font size it was drawn at.
+type SavedImage struct {
+	Image    image.Image
+	FontSize int // pixels; DefaultFontSize for files that don't record one
+}
+
 // Load decodes the screenshot at path.
-func (s *Store) Load(path string) (image.Image, error) {
-	file, err := os.Open(path)
+func (s *Store) Load(path string) (SavedImage, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("open screenshot %q: %w", path, err)
+		return SavedImage{}, fmt.Errorf("read screenshot %q: %w", path, err)
 	}
-	defer file.Close()
-	img, err := png.Decode(file)
+	img, err := png.Decode(bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("decode screenshot %q: %w", path, err)
+		return SavedImage{}, fmt.Errorf("decode screenshot %q: %w", path, err)
 	}
-	return img, nil
+	return SavedImage{Image: img, FontSize: savedFontSize(data)}, nil
 }
 
 // Delete removes the screenshot at path for good. It refuses files outside the store's

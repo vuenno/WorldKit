@@ -7,14 +7,16 @@ import (
 // Picture is a rendered screenshot and where its characters landed, so the text can be
 // selected and edited right on the image. Coordinates are image pixels.
 type Picture struct {
-	Image *image.RGBA
-	rows  []textRow
+	Image      *image.RGBA
+	FontSize   int // pixels, as drawn
+	rows       []textRow
+	lineHeight int
 }
 
 // PositionAt returns the caret position nearest to point: the row under it (or the
 // nearest row), between the two characters it falls between.
 func (p *Picture) PositionAt(point image.Point) Position {
-	rowIndex := max(0, min((point.Y-marginPx)/lineHeightPx, len(p.rows)-1))
+	rowIndex := max(0, min((point.Y-marginPx)/p.lineHeight, len(p.rows)-1))
 	if point.Y < marginPx {
 		rowIndex = 0
 	}
@@ -49,8 +51,8 @@ func (p *Picture) CaretBounds(pos Position) (image.Rectangle, bool) {
 		if !ok {
 			continue
 		}
-		top := marginPx + rowIndex*lineHeightPx
-		return image.Rect(x, top, x+1, top+lineHeightPx), true
+		top := marginPx + rowIndex*p.lineHeight
+		return image.Rect(x, top, x+1, top+p.lineHeight), true
 	}
 	return image.Rectangle{}, false
 }
@@ -87,8 +89,8 @@ func (p *Picture) SelectionBounds(sel Selection) []image.Rectangle {
 				continue
 			}
 			left, right := charEdges(placed)
-			top := marginPx + rowIndex*lineHeightPx
-			box = box.Union(image.Rect(left, top, right, top+lineHeightPx))
+			top := marginPx + rowIndex*p.lineHeight
+			box = box.Union(image.Rect(left, top, right, top+p.lineHeight))
 		}
 		if !box.Empty() {
 			boxes = append(boxes, box)

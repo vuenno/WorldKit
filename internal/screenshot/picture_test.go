@@ -57,7 +57,7 @@ func TestRowBoxesMatchRender(t *testing.T) {
 	lines := []Line{sayLine("A long first line of text"), sayLine("short")}
 	transparent := render(t, lines, Style{}).Image
 	backed := render(t, lines, Style{Backdrop: black}).Image
-	boxes := RowBoxes(transparent)
+	boxes := RowBoxes(transparent, DefaultFontSize)
 	if len(boxes) != 2 {
 		t.Fatalf("RowBoxes = %v, want 2 boxes", boxes)
 	}

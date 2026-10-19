@@ -135,6 +135,7 @@ const (
 	switchWidth          = unit.Dp(40)
 	switchHeight         = unit.Dp(24)
 	buttonPaddingX       = unit.Dp(14)
+	stepperValueWidth    = unit.Dp(52) // the value between a number stepper's − and +
 
 	logoSizeSidebar  = unit.Dp(32)
 	dialogWidth      = unit.Dp(440)
@@ -160,6 +161,7 @@ const (
 	checkerSquare           = unit.Dp(8)
 
 	extractDialogWidth = unit.Dp(720)
+	optionLabelWidth   = unit.Dp(88) // "Background", "Font size": lines up the controls after them
 	swatchSize         = unit.Dp(22)
 	swatchRingWidth    = unit.Dp(2) // the ring around a hovered color swatch
 	caretWidth         = unit.Dp(1) // the caret when editing text on a screenshot preview

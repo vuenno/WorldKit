@@ -37,15 +37,15 @@ func loadShots(store ScreenshotStore) ([]loadedShot, error) {
 	loaded := make([]loadedShot, len(shots))
 	for i, shot := range shots {
 		loaded[i] = loadedShot{shot: shot}
-		img, err := store.Load(shot.Path)
+		saved, err := store.Load(shot.Path)
 		if err != nil {
 			slog.Warn("read chat screenshot", "path", shot.Path, "error", err)
 			loaded[i].err = err
 			continue
 		}
-		loaded[i].image = paint.NewImageOp(img)
-		loaded[i].size = img.Bounds().Size()
-		loaded[i].rowBoxes = screenshot.RowBoxes(img)
+		loaded[i].image = paint.NewImageOp(saved.Image)
+		loaded[i].size = saved.Image.Bounds().Size()
+		loaded[i].rowBoxes = screenshot.RowBoxes(saved.Image, saved.FontSize)
 	}
 	return loaded, nil
 }

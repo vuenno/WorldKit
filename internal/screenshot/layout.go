@@ -21,14 +21,14 @@ type textRow struct {
 	width int // pixels
 }
 
-// layoutRows places every line's characters, wrapping lines wider than maxTextWidthPx at
+// layoutRows places every line's characters, wrapping lines wider than maxWidth pixels at
 // spaces. The space a line wraps at isn't drawn. A single word wider than the limit stays
 // on its own row rather than being cut. An empty line is one empty row.
-func layoutRows(faces *faces, lines []Line) []textRow {
+func layoutRows(faces *faces, lines []Line, maxWidth int) []textRow {
 	var rows []textRow
 	for lineIndex, line := range lines {
 		chars := lineChars(line)
-		for _, indices := range wrapChars(faces, chars) {
+		for _, indices := range wrapChars(faces, chars, maxWidth) {
 			rows = append(rows, placeRow(faces, chars, indices, lineIndex))
 		}
 	}
@@ -36,13 +36,13 @@ func layoutRows(faces *faces, lines []Line) []textRow {
 }
 
 // wrapChars splits a line into rows of character indices.
-func wrapChars(faces *faces, chars []Char) [][]int {
+func wrapChars(faces *faces, chars []Char, maxWidth int) [][]int {
 	words := splitWords(chars)
 	var rows [][]int
 	current := words[0]
 	for _, word := range words[1:] {
 		candidate := slices.Concat(current, word)
-		if placeRow(faces, chars, candidate, 0).width <= maxTextWidthPx {
+		if placeRow(faces, chars, candidate, 0).width <= maxWidth {
 			current = candidate
 			continue
 		}
