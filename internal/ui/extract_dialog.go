@@ -35,25 +35,24 @@ type extractDialog struct {
 	dialog     dialog
 	editor     pictureEditor
 	backdrop   *segmentedControl
-	fontSize   *numberStepper
+	chatFont   *segmentedControl // screenshot.ChatFonts, in order
+	chatScale  *numberStepper
 	widthLimit *numberStepper
-	// hasChosenWidth is set once the user picks a width; until then it follows the font
-	// size, so lines wrap as they do in game.
-	hasChosenWidth bool
-	settings       SettingsStore // where extract presets are kept
-	presetMenu     dropdownMenu
-	presetName     string // the preset the choices came from; "" once changed
-	naming         *presetNaming
-	hasOpened      bool
-	save           widget.Clickable
-	edit           widget.Clickable
-	cancel         widget.Clickable
-	italic         widget.Clickable
-	resetColor     widget.Clickable
-	swatches       []widget.Clickable // one per textSwatches color
-	body           widget.List
-	renderer       *backgroundLoad[*screenshot.Picture]
-	errText        string
+	settings   SettingsStore // where extract presets are kept
+	presetMenu dropdownMenu
+	presetName string // the preset the choices came from; "" once changed
+	naming     *presetNaming
+	hasOpened  bool
+	save       widget.Clickable
+	edit       widget.Clickable
+	cancel     widget.Clickable
+	italic     widget.Clickable
+	resetColor widget.Clickable
+	mergeLines widget.Clickable
+	swatches   []widget.Clickable // one per textSwatches color
+	body       widget.List
+	renderer   *backgroundLoad[*screenshot.Picture]
+	errText    string
 }
 
 // newExtractDialog creates the dialog; its presets are read from and saved to settings.
@@ -63,9 +62,13 @@ func newExtractDialog(invalidate func(), settings SettingsStore) *extractDialog 
 		naming:   newPresetNaming(),
 		dialog:   dialog{width: extractDialogWidth},
 		backdrop: newSegmentedControl(backdropLabels...),
-		fontSize: newNumberStepper(screenshot.DefaultFontSize, screenshot.MinFontSize, screenshot.MaxFontSize, "px"),
+		chatFont: newSegmentedControl(chatFontLabels()...),
+		chatScale: &numberStepper{
+			value: screenshot.DefaultChatScale,
+			min:   screenshot.MinChatScale, max: screenshot.MaxChatScale, increment: screenshot.ChatScaleStep, unit: "%",
+		},
 		widthLimit: &numberStepper{
-			value: screenshot.DefaultWidthLimit(screenshot.DefaultFontSize),
+			value: screenshot.DefaultWidthLimit(),
 			min:   screenshot.MinWidthLimit, max: screenshot.MaxWidthLimit, increment: widthLimitStep, unit: "px",
 		},
 		swatches: make([]widget.Clickable, len(textSwatches)),
@@ -75,8 +78,8 @@ func newExtractDialog(invalidate func(), settings SettingsStore) *extractDialog 
 }
 
 // Open shows the dialog for lines, unedited, their markup (/italic/, *action*) applied.
-// The look (background, font size, max width) stays as last chosen; the first time it
-// comes from the default preset, if one is set in Settings.
+// The look (background, chat font and scale, max width) stays as last chosen; the first
+// time it comes from the default preset, if one is set in Settings.
 func (d *extractDialog) Open(lines []chatLine) {
 	d.isOpen, d.isEditing, d.errText = true, false, ""
 	d.naming.Reset()
@@ -97,9 +100,23 @@ func (d *extractDialog) Lines() []screenshot.Line {
 	return d.editor.doc.NonEmptyLines()
 }
 
-// Style returns the chosen backdrop and font size.
+// Style returns the chosen look: backdrop, chat font and scale, and max width.
 func (d *extractDialog) Style() screenshot.Style {
-	return screenshot.Style{Backdrop: backdropColor(d.backdrop.selected), FontSize: d.fontSize.value, WidthLimit: d.widthLimit.value}
+	return screenshot.Style{Look: d.look(), Backdrop: backdropColor(d.backdrop.selected), WidthLimit: d.widthLimit.value}
+}
+
+// look is the chosen chat font and scale.
+func (d *extractDialog) look() screenshot.Look {
+	return screenshot.Look{Font: screenshot.ChatFonts[d.chatFont.selected], ChatScale: d.chatScale.value}
+}
+
+// chatFontLabels names the chat fonts for the Font control, in screenshot.ChatFonts order.
+func chatFontLabels() []string {
+	labels := make([]string, len(screenshot.ChatFonts))
+	for i, chatFont := range screenshot.ChatFonts {
+		labels[i] = chatFont.String()
+	}
+	return labels
 }
 
 // renderPreview draws every line, empty ones included, so rows on the picture match the
@@ -132,7 +149,9 @@ func (d *extractDialog) Update(gtx layout.Context) extractOutcome {
 	d.receivePreview()
 	isChanged := d.updatePresets(gtx)
 	isLookChanged := d.backdrop.Update(gtx)
-	isLookChanged = d.updateSize(gtx) || isLookChanged
+	isLookChanged = d.chatFont.Update(gtx) || isLookChanged
+	isLookChanged = d.chatScale.Update(gtx) || isLookChanged
+	isLookChanged = d.widthLimit.Update(gtx) || isLookChanged
 	if isLookChanged {
 		d.presetName = "" // the look no longer matches the preset
 		isChanged = true
@@ -160,29 +179,12 @@ func (d *extractDialog) Update(gtx layout.Context) extractOutcome {
 // widthLimitStep is how far one click moves Max width, in image pixels.
 const widthLimitStep = 50
 
-// updateSize handles the font size and Max width steppers and reports a change.
-func (d *extractDialog) updateSize(gtx layout.Context) bool {
-	if d.widthLimit.Update(gtx) {
-		d.hasChosenWidth = true
+// updateTools applies Italic, a color, Default or Merge lines to the editor's selection.
+func (d *extractDialog) updateTools(gtx layout.Context) bool {
+	if d.mergeLines.Clicked(gtx) && d.editor.MergeSelection() {
+		d.editor.Focus(gtx)
 		return true
 	}
-	if !d.fontSize.Update(gtx) {
-		return false
-	}
-	d.followFontSize()
-	return true
-}
-
-// followFontSize keeps Max width at the in-game width for the font size until the user
-// picks a width of their own.
-func (d *extractDialog) followFontSize() {
-	if !d.hasChosenWidth {
-		d.widthLimit.value = screenshot.DefaultWidthLimit(d.fontSize.value)
-	}
-}
-
-// updateTools applies Italic, a color or Default to the editor's selection.
-func (d *extractDialog) updateTools(gtx layout.Context) bool {
 	change := d.clickedTool(gtx)
 	if change == nil {
 		return false
@@ -238,14 +240,15 @@ func (d *extractDialog) Layout(gtx layout.Context, theme *material.Theme) {
 	})
 }
 
-// Body rows: the tools while editing, the preview, then the look: preset, background, font
-// size and max width, and Save as preset.
+// Body rows: the tools while editing, the preview, then the look: preset, background, chat
+// font and scale, max width, and Save as preset.
 const (
 	extractRowTools = iota
 	extractRowPreview
 	extractRowPreset
 	extractRowBackdrop
-	extractRowFontSize
+	extractRowChatFont
+	extractRowChatScale
 	extractRowWidthLimit
 	extractRowPresetNaming
 )
@@ -268,9 +271,13 @@ func (d *extractDialog) layoutBody(gtx layout.Context, theme *material.Theme) la
 			return layout.Inset{Top: spacingMedium}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layoutOptionRow(gtx, theme, "Background", d.backdrop.Layout, "Dark and Light put a box behind each line.")
 			})
-		case extractRowFontSize:
+		case extractRowChatFont:
 			return layout.Inset{Top: spacingSmall}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return layoutOptionRow(gtx, theme, "Font size", d.fontSize.Layout, "A bigger font makes a bigger image.")
+				return layoutOptionRow(gtx, theme, "Font", d.chatFont.Layout, "The font your chat is set to in game.")
+			})
+		case extractRowChatScale:
+			return layout.Inset{Top: spacingSmall}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layoutOptionRow(gtx, theme, "Chat scale", d.chatScale.Layout, "Your in-game Chat scale. Bigger text makes a bigger image.")
 			})
 		case extractRowWidthLimit:
 			return layout.Inset{Top: spacingSmall}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -296,8 +303,8 @@ func (d *extractDialog) widthLimitHint() string {
 func (d *extractDialog) layoutPreview(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	padding := gtx.Dp(spacingLarge)
 	height := gtx.Dp(screenshotPreviewHeight)
-	if picture := d.editor.picture; picture != nil {
-		shown := fittedSize(picture.Image.Bounds().Size(), gtx.Constraints.Max.X-2*padding)
+	if d.editor.picture != nil {
+		shown := d.editor.shownSize(gtx, gtx.Constraints.Max.X)
 		height = max(height, shown.Y+2*padding)
 	}
 	size := image.Pt(gtx.Constraints.Max.X, height)
@@ -354,8 +361,8 @@ func layoutOptionRow(gtx layout.Context, theme *material.Theme, label string, co
 	)
 }
 
-// layoutTools draws Italic, the color swatches and Default (the automatic colors), with a
-// hint on how they apply.
+// layoutTools draws Italic, the color swatches, Default (the automatic colors) and Merge
+// lines, with a hint on how they apply.
 func (d *extractDialog) layoutTools(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	children := []layout.FlexChild{
 		layout.Rigid(secondaryButton(&d.italic, "Italic").withIcon(iconItalic).withHeight(controlHeightSmall).Widget(theme)),
@@ -372,6 +379,13 @@ func (d *extractDialog) layoutTools(gtx layout.Context, theme *material.Theme) l
 	children = append(children,
 		layout.Rigid(layout.Spacer{Width: spacingSmall}.Layout),
 		layout.Rigid(ghostButton(&d.resetColor, "Default").withHeight(controlHeightSmall).Widget(theme)),
+		layout.Rigid(layout.Spacer{Width: spacingMedium}.Layout),
+		layout.Rigid(verticalDivider),
+		layout.Rigid(layout.Spacer{Width: spacingMedium}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			merge := secondaryButton(&d.mergeLines, "Merge lines").withIcon(iconMerge).withHeight(controlHeightSmall)
+			return layoutEnabled(gtx, d.editor.CanMergeSelection(), merge.Widget(theme))
+		}),
 	)
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -379,6 +393,8 @@ func (d *extractDialog) layoutTools(gtx layout.Context, theme *material.Theme) l
 		}),
 		layout.Rigid(layout.Spacer{Height: spacingSmall}.Layout),
 		layout.Rigid(caption(theme, "Drag over the text to select it (Ctrl+A: all). With nothing selected, tools change all the text. Ctrl+Z undoes.").Layout),
+		layout.Rigid(layout.Spacer{Height: spacingTiny}.Layout),
+		layout.Rigid(caption(theme, "Drag a line by its grip (or Alt+Up/Down) to move it. Select lines one person said, then Merge lines joins them.").Layout),
 	)
 }
 

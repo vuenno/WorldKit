@@ -147,14 +147,16 @@ func TestFittedSize(t *testing.T) {
 	}
 }
 
-func TestExtractDialogStyleFontSize(t *testing.T) {
+func TestExtractDialogStyleLook(t *testing.T) {
 	d := newExtractDialog(func() {}, &memorySettings{})
-	if got := d.Style().FontSize; got != screenshot.DefaultFontSize {
-		t.Errorf("default Style().FontSize = %d, want %d", got, screenshot.DefaultFontSize)
+	if got, want := d.Style().Look, (screenshot.Look{Font: screenshot.FontArial, ChatScale: screenshot.DefaultChatScale}); got != want {
+		t.Errorf("default look = %v, want %v", got, want)
 	}
-	d.fontSize.step(4)
-	if got := d.Style().FontSize; got != screenshot.DefaultFontSize+4 {
-		t.Errorf("Style().FontSize after +4 = %d, want %d", got, screenshot.DefaultFontSize+4)
+	d.chatFont.selected = chatFontIndex(screenshot.FontMukta)
+	d.chatScale.step(-1)
+	want := screenshot.Look{Font: screenshot.FontMukta, ChatScale: screenshot.DefaultChatScale - screenshot.ChatScaleStep}
+	if got := d.Style().Look; got != want {
+		t.Errorf("look after picking Mukta and a step down = %v, want %v", got, want)
 	}
 }
 
@@ -196,21 +198,13 @@ func TestNumberStepperLandsOnIncrements(t *testing.T) {
 	}
 }
 
-func TestExtractWidthFollowsFontSizeUntilChosen(t *testing.T) {
+func TestExtractWidthStartsAtTheInGameWidth(t *testing.T) {
 	d := newExtractDialog(func() {}, &memorySettings{})
-	if got := d.Style().WidthLimit; got != screenshot.DefaultWidthLimit(screenshot.DefaultFontSize) {
-		t.Fatalf("default WidthLimit = %d, want the in-game width", got)
+	if got := d.Style().WidthLimit; got != screenshot.DefaultWidthLimit() {
+		t.Fatalf("default WidthLimit = %d, want the in-game width %d", got, screenshot.DefaultWidthLimit())
 	}
-	d.fontSize.step(4)
-	d.followFontSize()
-	if got, want := d.Style().WidthLimit, screenshot.DefaultWidthLimit(screenshot.DefaultFontSize+4); got != want {
-		t.Errorf("after a bigger font, WidthLimit = %d, want %d", got, want)
-	}
-	d.widthLimit.value, d.hasChosenWidth = 500, true
-	d.fontSize.step(-4)
-	d.followFontSize()
-	if got := d.Style().WidthLimit; got != 500 {
-		t.Errorf("a chosen width changed with the font: %d, want 500", got)
+	if preset := d.currentPreset("x"); preset.WidthLimit != 0 {
+		t.Errorf("preset at the in-game width saves WidthLimit %d, want 0", preset.WidthLimit)
 	}
 }
 
@@ -229,28 +223,31 @@ func (m *memorySettings) Update(change func(*settings.Settings)) error {
 func TestExtractPresetsSaveAndApply(t *testing.T) {
 	store := &memorySettings{}
 	d := newExtractDialog(func() {}, store)
-	d.backdrop.selected, d.fontSize.value = backdropDark, 18
-	d.widthLimit.value, d.hasChosenWidth = 500, true
+	d.backdrop.selected, d.chatFont.selected, d.chatScale.value = backdropDark, chatFontIndex(screenshot.FontMukta), 75
+	d.widthLimit.value = 500
 	store.current.SaveExtractPreset(d.currentPreset("Forum"))
 
 	other := newExtractDialog(func() {}, store)
 	other.applyPresetNamed("Forum")
 	got := other.Style()
-	if got.Backdrop != colorBackdropDark || got.FontSize != 18 || got.WidthLimit != 500 || other.presetName != "Forum" {
+	wantLook := screenshot.Look{Font: screenshot.FontMukta, ChatScale: 75}
+	if got.Backdrop != colorBackdropDark || got.Look != wantLook || got.WidthLimit != 500 || other.presetName != "Forum" {
 		t.Errorf("applied preset gives %+v (preset %q)", got, other.presetName)
 	}
 }
 
-func TestExtractPresetKeepsFollowingTheFontSize(t *testing.T) {
+func TestOldExtractPresetGetsTheNearestChatScale(t *testing.T) {
 	store := &memorySettings{}
+	// Saved before chat looks: a pixel font size, no font, no width.
 	store.current.SaveExtractPreset(settings.ExtractPreset{Name: "Big", Backdrop: "light", FontSize: 22})
 	store.current.DefaultExtractPreset = "Big"
 	d := newExtractDialog(func() {}, store)
 	d.Open([]chatLine{{copyText: "John Doe says: hi", color: colorChatSay}})
-	if got, want := d.Style().WidthLimit, screenshot.DefaultWidthLimit(22); got != want || d.hasChosenWidth {
-		t.Errorf("default preset without a width: WidthLimit = %d (chosen %v), want %d following the font", got, d.hasChosenWidth, want)
+	want := screenshot.Look{Font: screenshot.FontArial, ChatScale: screenshot.ChatScaleForFontSize(22)}
+	if got := d.Style(); got.Look != want || got.WidthLimit != screenshot.DefaultWidthLimit() {
+		t.Errorf("old preset gives %+v, want %v at the in-game width", got, want)
 	}
-	if preset := d.currentPreset("again"); preset.WidthLimit != 0 {
-		t.Errorf("re-saved preset WidthLimit = %d, want 0 (follow the font)", preset.WidthLimit)
+	if preset := d.currentPreset("again"); preset.FontSize != 0 || preset.ChatScale != want.ChatScale || preset.WidthLimit != 0 {
+		t.Errorf("re-saved preset = %+v, want the chat scale, no font size, in-game width", preset)
 	}
 }

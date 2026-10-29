@@ -5,7 +5,7 @@ are. **Read this first, then `CLAUDE.md` (code rules) and `DESIGN.md` (visual ru
 Keep this file current: update it in the same change whenever features, structure or key
 decisions change.
 
-_Last updated: 2026-10-24_
+_Last updated: 2026-10-29_
 
 ## What it is
 
@@ -33,7 +33,7 @@ listed on the **Saved Screenshots** page.
 | Saved Screenshots| Done: every export (from `exports.json`) grouped by day: thumbnail, name, folder, size, format, file size; detail view; Show in folder; Delete (confirmed; only listed, unchanged files); missing files can be removed from the list |
 | Logs page        | Done: "Live now" card for the session being captured; sessions grouped Today / Yesterday / Earlier this week / month, each with start time, duration, characters, line count and a kind bar; search by character or date |
 | Log viewer       | Done: always-visible toolbar (find text, kind segments All/IC/me/do/b/PMs, Characters menu, timestamps switch), filter chips + Clear filters, timestamp column, drag/Shift+click/Ctrl+A/Esc selection, floating selection bar (Copy, **Extract image**, ×), toasts ("Screenshot saved · View" opens it) |
-| Extract dialog   | Done: **Extract image** opens a modal with a live preview, the Transparent/Dark/Light backdrop a **Font size** stepper (10–24 px, default 14; the image grows with it) and **Max width** (200–1800 px; lines wrap to fit, default the in-game width, following the font size until changed); "Save as they are, or edit them first?" → **Edit** makes the preview itself editable: drag/Shift+click/Ctrl+A to select text on the image, **Italic**, a color picker (chat colors) and **Default** apply to it; click and type, Backspace/Delete/Enter, arrows/Home/End, Ctrl+Z undo; **presets** of background, font size and max width: pick one in the dialog, **Save as preset…**, the default one applies to the first extract |
+| Extract dialog   | Done: **Extract image** opens a modal with a live preview, the Transparent/Dark/Light backdrop, the game's chat look as set in its settings — **Font** (Arial · Mukta) and **Chat scale** (50–150 %, steps of 5, default 100; the image grows with it) — and **Max width** (200–1800 px; lines wrap to fit, default the in-game chat width at any scale); "Save as they are, or edit them first?" → **Edit** makes the preview itself editable: drag/Shift+click/Ctrl+A to select text on the image, **Italic**, a color picker (chat colors) and **Default** apply to it; click and type, Backspace/Delete/Enter, arrows/Home/End, Ctrl+Z undo; **reorder lines** by dragging the grip beside each (or Alt+Up/Down); **Merge lines** joins the selected lines one person said ("X says: A." + "X says: B." → "X says: A. B."); **presets** of background, chat font and scale, and max width (older font-size presets get the nearest scale): pick one in the dialog, **Save as preset…**, the default one applies to the first extract |
 | Screenshot look  | Done: markup `/italic/` and `*action*` (in the /me color), markers removed; Dark/Light backdrops are a box behind each row of text, transparent elsewhere |
 | Log Screenshots  | Done: gallery grouped by day, checkerboard 1:1 previews, hover actions (Show in folder, Delete); detail view with a Transparent/Dark/Light preview (boxes behind the text rows) and details; delete with confirmation |
 | Settings page    | Done: capture status, FiveM data folder with **Browse…** (Windows folder dialog), start with Windows switch, Log Screenshots card (extract presets: make default, delete), Screenshot Editor card (export folder with Browse…, export presets: make default, delete), logs/screenshots folders |
@@ -43,7 +43,7 @@ listed on the **Saved Screenshots** page.
 | First-run prompts| Done: FiveM data folder (only if not found; Browse… or type), start with Windows (asked once) |
 | Persistence      | `%AppData%\WorldKit\settings.json` (incl. export folder and presets), `%AppData%\WorldKit\exports.json` (the export list), `%AppData%\WorldKit\logs\YYYY\MM\*.txt`, `%AppData%\WorldKit\screenshots\*.png`, `%AppData%\WorldKit\diagnostics\` (`app.log`, `crash-*.log`); exports wherever the user saves them (default `Pictures\WorldKit`) |
 | Releases         | Done: manual **Release** workflow (`.github/workflows/release.yml`) runs the checks, builds with the typed version and publishes an Inno Setup installer under a new `v<version>` tag |
-| Tests            | Animation, chat archive/parser/filter/library/summary, KVS reader, capture service, settings, diagnostics, folder picker setup, screenshot render/font sizes/store (font size round trip)/markup/document edits/hit-testing/backdrop boxes, extract dialog and picture editor (lines, style, font size, keys, restyle, undo), number stepper, UI texts (days, durations, counts), filters, chat lines, selection menu placement, icons, gallery layout; compose (transform, hit-testing, resize/rotate incl. rotated, snapping, reorder, canvas resize, history, placement, linear-light blending, exact 1:1 pixels, missing source, all formats, quantizer alpha), exports index (add/list/missing/remove, delete only listed unchanged files), file dialogs (COM setup, extensions), settings presets; benchmarks for 4K render/encode |
+| Tests            | Animation, chat archive/parser/filter/library/summary, KVS reader, capture service, settings, diagnostics, folder picker setup, screenshot render/chat geometry against Chromium's measures (sizes, row heights, baselines, gamma buckets and curve, fake bold, hyphen breaks)/store (look round trip, older screenshots' row grids)/markup/document edits/hit-testing/backdrop boxes, DirectWrite glyph masks (against Chromium's), extract dialog and picture editor (lines, style, chat look, old presets, keys, restyle, undo), number stepper, UI texts (days, durations, counts), filters, chat lines, selection menu placement, icons, gallery layout; compose (transform, hit-testing, resize/rotate incl. rotated, snapping, reorder, canvas resize, history, placement, linear-light blending, exact 1:1 pixels, missing source, all formats, quantizer alpha), exports index (add/list/missing/remove, delete only listed unchanged files), file dialogs (COM setup, extensions), settings presets; benchmarks for 4K render/encode |
 
 ## Architecture
 
@@ -75,6 +75,7 @@ main()  (-minimized flag)               cmd/worldkit/main.go
 controls, text styles, icons            internal/ui/button.go, controls.go, text.go, icons.go
 theme tokens + fonts                    internal/ui/theme.go (mirrors DESIGN.md), fonts.go (embedded Geist)
 assets.Logo(), assets.Fonts             assets/assets.go     embedded logo.png and fonts/*.ttf
+assets.MuktaRegular                     assets/chatfonts/    Mukta for chat screenshots only
 ```
 
 The UI talks to domain code only through the small interfaces in `ui.Services`
@@ -116,11 +117,12 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `internal/settings/`                   | `settings.json` load + atomic save                          |
 | `internal/diagnostics/`                | `Start`: `slog` → `app.log`, crash output → `crash-*.log`; `End`/`Close` |
 | `internal/filedialog/`                 | Windows file dialogs via COM, no CGO: `PickFolder`, `OpenFiles` (multi-select), `Save` (one file type, extension enforced) |
+| `internal/directwrite/`                | DirectWrite via COM, no CGO: `Open` a font file, `GlyphMask` (one glyph at a fractional pen position, ClearType averaged to gray, as Chromium draws chat text) |
 | `internal/compose/`                    | Screenshot Editor model: `Composition`/`Layer` (center-based), geometry.go (`Transform`, hit-testing, handles, `Resized`, `Rotated`, `Snapped`), `History` (undo/redo), placement.go, decode.go (`ReadSize`, `Decode`, `Downscale`), render.go + linear.go (CPU export in linear light), encode.go (`Format`, PNG/JPEG), quantize.go (median cut + dithering), `Export` |
 | `internal/exports/`                    | `Index`: `exports.json` list of exports; `List` marks missing/changed files; `Delete` only listed, unchanged files |
 | `internal/atomicfile/`                 | `Write`: temp file + sync + rename, for settings, screenshots, exports |
 | `internal/autostart/`                  | Start with Windows via the HKCU `Run` registry key          |
-| `internal/screenshot/`                 | `Render` (lines + `Style` → `Picture`, in-game look, backdrop and font size 10–24 px), `RowBoxes` (boxes of a saved image at its font size), layout.go (per-character placement, wrapping), picture.go (`PositionAt`, `CaretBounds`, `SelectionBounds`), `NewLine` / `ParseMarkup` (markup.go), `Document` (editable styled characters), Arial faces + cache (font.go), `Store` (save/list/load/delete in `screenshots\`; `Load` → `SavedImage` with its font size), pngtext.go (font size in a PNG tEXt chunk) |
+| `internal/screenshot/`                 | `Render` (lines + `Style` → `Picture`, the in-game chat as Chromium draws it, backdrop), chat.go (`ChatFont`, `Look`, chat scales, the game's chat CSS as measures: `chatGeometry`), font.go (Arial via DirectWrite, bundled Mukta, fallbacks, caches), glyphs.go (DirectWrite and fake-bold outline rasterizers, Skia's ClearType filter, glyph cache), gamma.go (Skia's per-color coverage tables), shadow.go (the triple text-shadow), `RowBoxes` (boxes of a saved image on its `RowGrid`), layout.go (per-character placement, kerning, wrapping at spaces and hyphens), picture.go (`PositionAt`, `CaretBounds`, `SelectionBounds`, `LineBounds`), `NewLine` / `ParseMarkup` (markup.go), `Document` (editable styled characters; lines.go: `MoveLine`, `SelectedLines`, `CanMergeLines` / `MergeLines`), `Store` (save/list/load/delete in `screenshots\`; `Load` → `SavedImage` with its row grid), pngtext.go (the look in a PNG tEXt chunk; older screenshots' font size) |
 | `internal/ui/app.go`                   | Event loop (window events, maximize state, HWND), `Shell` (pages, prompts, View link) |
 | `internal/ui/title_bar.go`             | `titleBar`, `moveArea`, caption buttons and glyphs          |
 | `internal/ui/sidebar.go`               | `Sidebar`, `NavItem`, `navRow`, `captureCard` (+ `captureCardTexts`) |
@@ -132,8 +134,9 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `internal/ui/selection_menu.go`        | `selectionMenu` (count, Copy, Extract image, ×), `selectionMenuOrigin` |
 | `internal/ui/line_selection.go`        | `lineSelection`: anchor/end range of whole lines (pure logic, tested) |
 | `internal/ui/screenshots_page.go`      | Log Screenshots gallery: `shotCard`, day groups, checkerboard, 1:1 image drawing |
-| `internal/ui/extract_dialog.go`        | `extractDialog`: preview, backdrop, font size, Italic, color swatches, Default; `layoutOptionRow`, `fittedSize` |
+| `internal/ui/extract_dialog.go`        | `extractDialog`: preview, backdrop, chat font and scale, max width, Italic, color swatches, Default; `layoutOptionRow`, `fittedSize` |
 | `internal/ui/picture_editor.go`        | `pictureEditor`: select, type and undo on the rendered preview image |
+| `internal/ui/picture_lines.go`         | `pictureEditor` line tools: grips and drag to reorder, Alt+Up/Down, Merge lines |
 | `internal/ui/screenshot_view.go`       | `screenshotView` (detail, backdrop boxes, details card), `backdropColor`, `shotDeletion` (confirm + delete) |
 | `internal/ui/settings_page.go`         | Settings page: `settingsCard`, `settingRow`, `pathRow`      |
 | `internal/ui/export_settings.go`       | Settings' Screenshot Editor card: export folder, presets    |
@@ -163,6 +166,7 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `internal/ui/logo.go`                  | `Logo` widget (sharp at any DPI)                            |
 | `internal/ui/theme.go`, `fonts.go`     | All design tokens and `NewTheme()`; embedded-font shaper    |
 | `assets/assets.go`, `assets/logo.png`, `assets/fonts/` | Embedded logo (384×384, the only logo source) and Geist/Geist Mono TTFs + `OFL.txt` |
+| `assets/chatfonts/`                    | `Mukta-Regular.ttf` (Google Fonts' Mukta, the file the game loads) + its `OFL.txt`; screenshots only, never the UI |
 | `cmd/worldkit/rsrc_windows_amd64.syso` | Generated exe icon + manifest; linked automatically by `go build` |
 | `.github/workflows/release.yml`        | Manual release: checks, versioned build, installer, tag + GitHub release |
 | `installer/worldkit.iss`               | Inno Setup script: per-user install, Start menu entry, uninstall keeps user data |
@@ -247,16 +251,42 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   for areas drawn inside its clip, so a menu inside the list would start a new selection on
   every click. `chatLineList` lays the menu out after popping the list's clip and positions it
   from last frame's row heights (`lineBounds`).
-- **Screenshots are rendered in pure Go**, not by Gio: `golang.org/x/image/font/opentype` draws
-  onto an `image.RGBA`. No GPU, no window, unit-testable, and no new dependency (x/image was
-  already required). Style follows the Chatlog Magician's output (bold Arial, black outline,
-  transparent background or a box behind each line).
-- **Arial Bold is read from Windows, not bundled.** Its license forbids redistribution, but
-  every Windows install has `%WINDIR%\Fonts\arialbd.ttf` (WorldKit is Windows-only). If it is
-  missing or unreadable, the bundled Go Bold is used and a warning is logged. Roboto was
-  considered; Arial matches the community's existing chat screenshots. Italic uses
-  `arialbi.ttf` the same way (fallback Go Bold Italic). Parsed fonts are cached by path,
-  because the extract dialog re-renders its preview on every keystroke.
+- **Screenshots reproduce the game's chat as Chromium draws it**, not by Gio: WorldKit
+  renders onto an `image.RGBA` itself (no GPU, no window, unit-testable). GTA World's chat is
+  a web page in FiveM's browser (CEF, Chromium); its stylesheet was read with `nui_devtools`
+  (FiveM dev mode: launch with `+set moo 31337`): `.chat` is `font-size: 1.55vh`, weight
+  700, `letter-spacing: 0.4px`, the player's **chat font** (Arial or Mukta) and **chat
+  scale** multiply the size, lines are that size + 0.2 × 1.55vh tall, `.chat__messages` is
+  `40vw` wide with `text-shadow: 0 0 0.18vh #000` three times. WorldKit uses those values
+  at 1920×1080. Every Chromium step was then matched against headless Chrome/Edge drawing
+  the same CSS on a transparent page, pixel for pixel (average error ≈ 1.5/255 for Arial,
+  ≈ 3/255 for Mukta, shadows and wrapping included):
+  - font size truncated to hundredths in float32 (its font cache: 10.044 px → 10.04), line
+    heights rounded to 1/64 px (layout units), baseline = row top + round(ascent) +
+    floor(half-leading), y rounded to whole pixels;
+  - unhinted advances + GPOS kerning + 0.4 px spacing, each glyph drawn at its x rounded to
+    the nearest quarter pixel;
+  - Arial (a real Bold face) through **DirectWrite** (`internal/directwrite`): natural mode,
+    vertical grid fit, ClearType coverage averaged to gray — Chromium's Skia does exactly
+    this; Go's rasterizers were visibly off;
+  - Mukta: the game loads only Mukta Regular from Google Fonts, so its bold is **Skia's
+    fake bold**: the outline grows by size × 1/24…1/32 (FreeType-style emboldening here),
+    drawn at 4× width through Skia's 12-tap ClearType filter and averaged; italic is a 0.25
+    skew; characters Mukta lacks fall back to Arial (the CSS `sans-serif`);
+  - Skia's mask gamma per text color: channels reduced to 3 bits, Skia's luminance, 8
+    buckets, gamma 2.2 and contrast 1.0 (Windows' text settings);
+  - the shadow: the run's glyphs as black text, blurred with a measured 5-tap kernel
+    (Skia's small blur isn't a plain Gaussian), stacked three times, under each run.
+  The game itself may still blend its browser layer onto the frame differently (a JPEG from
+  a player looked slightly heavier than Chromium's own output); that last step needs a
+  lossless in-game capture to measure.
+- **Arial is read from Windows, not bundled; Mukta is.** Arial's license forbids
+  redistribution, but every Windows install has `%WINDIR%\Fonts\arialbd.ttf` and
+  `arialbi.ttf`. If they are missing, the bundled Go Bold / Bold Italic are used (drawn from
+  outlines) and a warning is logged; if DirectWrite fails, Arial is drawn from outlines.
+  Mukta (OFL) is embedded from `assets/chatfonts`, kept apart from `assets/fonts` so the UI
+  never loads it. Fonts, faces and drawn glyphs are cached, because the extract dialog
+  re-renders its preview on every keystroke.
 - **Chat markup becomes styled characters.** `/italic/` and `*action*` (in the /me color)
   are parsed once when the dialog opens (`NewLine`); both markers are removed from the
   image. Markers only count at word edges, so `and/or`, `1/2`, `2 * 3` and the `* ` that
@@ -272,6 +302,17 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   saved. The preview re-renders off the UI goroutine after each change and may trail the
   text by a keystroke. Typed text takes the style of the character before it. Undo keeps
   whole-document copies (a few lines each, capped at 200).
+- **Lines move by grips, merge by speaker.** Each line has a grip in the margin left of the
+  edited preview (the margin widens by `lineGripWidth` while editing); dragging it shows
+  where the line lands, and the whole line moves (Alt+Up/Down does the same from the
+  keyboard). Merge lines works on the lines the selection touches: it needs two or more
+  with text, every one "speech" with the same prefix up to the first ": " once a leading
+  `[HH:MM:SS] ` is skipped ("Mason Fletcher says: "), and lines starting with `*`, `(` or
+  `[` (emotes, OOC, [INFO]) never count, mirroring chatlog's says/shouts/whispers rules.
+  So "says" and "shouts" by one person don't merge, which keeps the result truthful. The
+  first line keeps its timestamp; later lines add their words after a space, styles
+  kept. Lines must be next to each other (empty lines between are dropped), which is why
+  merging comes with reordering.
 - **Backdrops are a box per row, not a fill.** Dark (`#000000`, the Magician's default) and
   Light draw a box behind each drawn row, as wide as that row's text plus 5 px each side,
   rows flush, the rest of the image transparent: the same per-line `inline-block`
@@ -279,20 +320,23 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   little of the game picture as possible. One box around the whole block was the
   alternative; it hides more of the screenshot under short lines. The choice is baked into
   the PNG; the detail view previews it on any shot via `screenshot.RowBoxes`, which finds
-  the rows by Render's row grid for the shot's font size.
-- **Font size is picked per extract (10–24 px) and scales the whole image.** Line height
-  and the wrap width grow with it, so lines wrap at the same words; padding, outline and
-  backdrop padding stay fixed. Each PNG records its size in a `tEXt` chunk
-  (`WorldKit:FontSize`, spliced in by pngtext.go because `image/png` can't write text
-  chunks) so the gallery can find its rows; files without one were drawn at 14 px, the
-  only size before. A file name suffix was the alternative; it breaks when users rename.
-- **Max width caps the image, defaulting to the in-game wrap.** Chat images were up to
-  ~914 px wide, wider than small canvases (500 × 500) in the Screenshot Editor. The limit is
-  an image width in pixels, since that is what has to fit; it follows the font size until
-  the user sets it, so the default still wraps where the game does. Over-long words break
-  between characters so the limit always holds. Manual breaks stay separate lines (Enter in
-  the picture editor), each wrapping on its own. It isn't recorded in the PNG: rows are found
-  from the font size alone.
+  the rows on the shot's `RowGrid`.
+- **The look is the game's own settings: Font and Chat scale**, not a pixel size, so
+  players enter what they see in game. It replaced a Font size stepper (10–24 px), which
+  only approximated the game. Each PNG records its look in a `tEXt` chunk
+  (`WorldKit:Chat` = "Arial 60", spliced in by pngtext.go because `image/png` can't write
+  text chunks) so the gallery can find its rows (fractional row tops, as in game); older
+  files have `WorldKit:FontSize` or nothing (14 px) and keep their old row grid. Old
+  presets' font size becomes the nearest chat scale. A file name suffix was the
+  alternative; it breaks when users rename.
+- **Max width caps the image, defaulting to the in-game chat width.** The game's chat box is
+  `40vw` (758 px of text at 1080p) at every scale, so bigger text wraps into more rows, as
+  in game; players can widen their chat in game, so the width stays adjustable. The limit
+  is an image width in pixels, since that is what has to fit (small canvases, 500 × 500, in
+  the Screenshot Editor). Lines wrap at spaces and after a hyphen between letters (as
+  Chromium does: "L-C-C"); over-long words break between characters so the limit always
+  holds. Manual breaks stay separate lines (Enter in the picture editor), each wrapping on
+  its own. It isn't recorded in the PNG: rows are found from the look alone.
 - **Screenshots live next to the logs** (`%AppData%\WorldKit\screenshots\`), flat, named by
   save time in UTC like session files (`2026-10-18_101530.png`, `_2` on collisions), written
   via a temp file + rename. `Store.Delete` refuses paths outside that folder. Previews are
@@ -427,7 +471,10 @@ graphify explain "Sidebar"
 - Verify capture while FiveM is running (live copy of the KVS) with a real play session.
 - Log viewer: live-update the open session as new lines arrive (today it reads once on open),
   a search box for long character lists, colored tags inside a line (e.g. blue `[INFO]`).
-- Screenshots: **Copy image** to the clipboard (Gio's clipboard is text-only; needs Win32
+- Screenshots: measure how the game blends its chat layer onto the frame from a **lossless
+  in-game capture** (Arial 60 % and Mukta 75 % over a plain background) and add that last
+  step if it differs from Chromium's output; other resolutions than 1080p (the vh-based
+  sizes and shadow scale with screen height). **Copy image** to the clipboard (Gio's clipboard is text-only; needs Win32
   `CF_PNG`/`CF_DIB`), link a screenshot back to its session. Extract
   dialog: a custom color besides the swatches, remember the last look between launches (today only a default preset
   does); picture editor: double-click to select a word, Ctrl+C/Ctrl+V,

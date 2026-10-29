@@ -16,6 +16,12 @@ func render(t *testing.T, lines []Line, style Style) *Picture {
 	return picture
 }
 
+// rowMiddle is the y halfway down the picture's row.
+func rowMiddle(picture *Picture, row int) int {
+	top, bottom := picture.grid.rowSpan(row)
+	return (top + bottom) / 2
+}
+
 func TestRenderBackdrop(t *testing.T) {
 	lines := []Line{sayLine("A long first line of text"), sayLine("short")}
 	tests := []struct {
@@ -28,17 +34,19 @@ func TestRenderBackdrop(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			img := render(t, lines, Style{Backdrop: test.backdrop}).Image
+			picture := render(t, lines, Style{Backdrop: test.backdrop})
+			img := picture.Image
 			// Corners stay transparent: the backdrop hugs the text, it doesn't fill the image.
 			if corner := img.RGBAAt(0, 0); corner.A != 0 {
 				t.Errorf("corner = %v, want transparent", corner)
 			}
 			// Right of the short second row is outside its box.
-			if pixel := img.RGBAAt(img.Bounds().Dx()-marginPx, marginPx+lineHeightPx+lineHeightPx/2); pixel.A != 0 {
+			if pixel := img.RGBAAt(img.Bounds().Dx()-marginPx, rowMiddle(picture, 1)); pixel.A != 0 {
 				t.Errorf("beside the short row = %v, want transparent", pixel)
 			}
 			// Left of the text, inside the first row's padding, is the backdrop.
-			inPadding := img.RGBAAt(marginPx-backdropPaddingPx+1, marginPx+1)
+			top, _ := picture.grid.rowSpan(0)
+			inPadding := img.RGBAAt(marginPx-backdropPaddingPx+1, top+1)
 			if want := test.backdrop.A; inPadding.A != want {
 				t.Errorf("row padding alpha = %d, want %d", inPadding.A, want)
 			}
@@ -47,17 +55,17 @@ func TestRenderBackdrop(t *testing.T) {
 }
 
 func TestRenderEmptyLineHasNoBackdrop(t *testing.T) {
-	img := render(t, []Line{sayLine("text"), sayLine("")}, Style{Backdrop: black}).Image
-	if pixel := img.RGBAAt(marginPx, marginPx+lineHeightPx+lineHeightPx/2); pixel.A != 0 {
+	picture := render(t, []Line{sayLine("text"), sayLine("")}, Style{Backdrop: black})
+	if pixel := picture.Image.RGBAAt(marginPx, rowMiddle(picture, 1)); pixel.A != 0 {
 		t.Errorf("empty row = %v, want transparent", pixel)
 	}
 }
 
 func TestRowBoxesMatchRender(t *testing.T) {
 	lines := []Line{sayLine("A long first line of text"), sayLine("short")}
-	transparent := render(t, lines, Style{}).Image
+	transparent := render(t, lines, Style{})
 	backed := render(t, lines, Style{Backdrop: black}).Image
-	boxes := RowBoxes(transparent, DefaultFontSize)
+	boxes := RowBoxes(transparent.Image, transparent.grid)
 	if len(boxes) != 2 {
 		t.Fatalf("RowBoxes = %v, want 2 boxes", boxes)
 	}
@@ -77,17 +85,16 @@ func TestRowBoxesMatchRender(t *testing.T) {
 
 func TestPicturePositionAt(t *testing.T) {
 	picture := render(t, []Line{sayLine("Hello there"), sayLine("Hi"), sayLine("")}, Style{})
-	rowMiddle := func(row int) int { return marginPx + row*lineHeightPx + lineHeightPx/2 }
 	tests := []struct {
 		name  string
 		point image.Point
 		want  Position
 	}{
-		{"left of the text", image.Pt(0, rowMiddle(0)), at(0, 0)},
+		{"left of the text", image.Pt(0, rowMiddle(picture, 0)), at(0, 0)},
 		{"above the image", image.Pt(0, -50), at(0, 0)},
-		{"right of the text", image.Pt(10_000, rowMiddle(0)), at(0, 11)},
-		{"second line end", image.Pt(10_000, rowMiddle(1)), at(1, 2)},
-		{"empty line", image.Pt(30, rowMiddle(2)), at(2, 0)},
+		{"right of the text", image.Pt(10_000, rowMiddle(picture, 0)), at(0, 11)},
+		{"second line end", image.Pt(10_000, rowMiddle(picture, 1)), at(1, 2)},
+		{"empty line", image.Pt(30, rowMiddle(picture, 2)), at(2, 0)},
 		{"below the image", image.Pt(30, 10_000), at(2, 0)},
 	}
 	for _, test := range tests {
@@ -122,7 +129,7 @@ func TestPictureWrappedLine(t *testing.T) {
 	picture := render(t, []Line{sayLine(text)}, Style{})
 	end := at(0, len(text))
 	caret, ok := picture.CaretBounds(end)
-	if !ok || caret.Min.Y < marginPx+lineHeightPx {
+	if secondRowTop, _ := picture.grid.rowSpan(1); !ok || caret.Min.Y < secondRowTop {
 		t.Errorf("end caret = %v, %v; want on a later row", caret, ok)
 	}
 	if got := len(picture.SelectionBounds(Selection{Caret: end})); got < 2 {

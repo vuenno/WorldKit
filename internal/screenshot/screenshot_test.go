@@ -14,15 +14,16 @@ var white = color.NRGBA{R: 0xF1, G: 0xF1, B: 0xF1, A: 0xFF}
 
 func TestRender(t *testing.T) {
 	longLine := strings.Repeat("word ", 400)
+	rowHeight := int(geometryFor(Look{}).lineHeight)
 	tests := []struct {
 		name          string
 		lines         []Line
 		wantMinHeight int
 		wantMaxWidth  int
 	}{
-		{"one line", []Line{NewLine("John Doe says: Hi.", white, white)}, lineHeightPx, maxTextWidthPx},
-		{"two lines", []Line{NewLine("a", white, white), NewLine("b", white, white)}, 2 * lineHeightPx, maxTextWidthPx},
-		{"long line wraps", []Line{NewLine(longLine, white, white)}, 3 * lineHeightPx, maxTextWidthPx + 2*(paddingPx+outlinePx)},
+		{"one line", []Line{NewLine("John Doe says: Hi.", white, white)}, rowHeight, DefaultWidthLimit()},
+		{"two lines", []Line{NewLine("a", white, white), NewLine("b", white, white)}, 2 * rowHeight, DefaultWidthLimit()},
+		{"long line wraps", []Line{NewLine(longLine, white, white)}, 3 * rowHeight, DefaultWidthLimit()},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -50,16 +51,16 @@ func TestRenderKeepsBackgroundTransparentAndDrawsText(t *testing.T) {
 	if corner := img.RGBAAt(0, 0); corner.A != 0 {
 		t.Errorf("corner = %v, want transparent", corner)
 	}
-	var hasText, hasOutline bool
+	var hasText, hasShadow bool
 	for y := range img.Bounds().Dy() {
 		for x := range img.Bounds().Dx() {
 			pixel := img.RGBAAt(x, y)
 			hasText = hasText || (pixel.A == 0xFF && pixel.R > 0xE0)
-			hasOutline = hasOutline || (pixel.A == 0xFF && pixel.R == 0)
+			hasShadow = hasShadow || (pixel.A > 0x40 && pixel.R == 0)
 		}
 	}
-	if !hasText || !hasOutline {
-		t.Errorf("hasText = %v, hasOutline = %v, want both", hasText, hasOutline)
+	if !hasText || !hasShadow {
+		t.Errorf("hasText = %v, hasShadow = %v, want both", hasText, hasShadow)
 	}
 }
 

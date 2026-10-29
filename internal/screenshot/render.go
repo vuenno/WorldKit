@@ -4,12 +4,11 @@ package screenshot
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
-
-	"golang.org/x/image/font"
-	"golang.org/x/image/math/fixed"
+	"math"
 )
 
 // Line is one chat line to draw, as styled spans (see NewLine for chat text with markup).
@@ -20,11 +19,11 @@ type Line struct {
 
 // Style is how a whole screenshot is drawn, beyond its characters' own styles.
 type Style struct {
+	Look                 // the game's chat font and scale
 	Backdrop color.NRGBA // the box behind each row of text; zero (transparent): no box
-	FontSize int         // pixels, MinFontSize to MaxFontSize; zero: DefaultFontSize
 	// WidthLimit is the widest the image may be, in pixels (MinWidthLimit to
-	// MaxWidthLimit); longer lines wrap to fit. Zero: DefaultWidthLimit(FontSize), the
-	// in-game chat box's width.
+	// MaxWidthLimit); longer lines wrap to fit. Zero: DefaultWidthLimit, the in-game chat
+	// box's width.
 	WidthLimit int
 }
 
@@ -34,141 +33,196 @@ const (
 	MaxWidthLimit = 1800
 )
 
-// DefaultWidthLimit is the in-game chat box's width at fontSize, as an image width: lines
-// wrap where they wrap in game.
-func DefaultWidthLimit(fontSize int) int {
-	return sizingFor(fontSize).maxTextWidth + 2*marginPx
+// DefaultWidthLimit is the in-game chat box's width as an image width: lines wrap where
+// they do in game, whatever the chat scale.
+func DefaultWidthLimit() int {
+	return chatTextWidthPx + 2*marginPx
 }
 
-// ClampWidthLimit returns limit within MinWidthLimit..MaxWidthLimit, and the default for
-// fontSize when limit is zero.
-func ClampWidthLimit(limit, fontSize int) int {
+// ClampWidthLimit returns limit within MinWidthLimit..MaxWidthLimit, and DefaultWidthLimit
+// when limit is zero.
+func ClampWidthLimit(limit int) int {
 	if limit == 0 {
-		return DefaultWidthLimit(fontSize)
+		return DefaultWidthLimit()
 	}
 	return max(MinWidthLimit, min(limit, MaxWidthLimit))
 }
 
-// The font sizes a screenshot can be drawn at, in pixels. DefaultFontSize matches the
-// in-game chat at its usual setting.
+// The look follows the in-game chat (see chat.go): white bold text with a soft black
+// shadow on a transparent background, so it stays readable over any screenshot.
 const (
-	MinFontSize     = 10
-	MaxFontSize     = 24
-	DefaultFontSize = 14
-)
-
-// ClampFontSize returns size within MinFontSize..MaxFontSize, and DefaultFontSize for zero.
-func ClampFontSize(size int) int {
-	if size == 0 {
-		return DefaultFontSize
-	}
-	return max(MinFontSize, min(size, MaxFontSize))
-}
-
-// The look follows the in-game chat: bold text with a black outline on a transparent
-// background, so it stays readable over any screenshot. Line height and wrap width are
-// given at DefaultFontSize; they grow with the font (see sizingFor).
-const (
-	lineHeightPx   = 18
-	paddingPx      = 6
-	outlinePx      = 1
-	maxTextWidthPx = 900 // longer lines wrap, like the in-game chat box
+	paddingPx = 5
 	// backdropPaddingPx is how far a backdrop box reaches past its row's text on the left
 	// and right, as in the Chatlog Magician (padding 0 5px).
 	backdropPaddingPx = 5
-	marginPx          = paddingPx + outlinePx // from the image edge to the text
+	marginPx          = paddingPx + shadowReachPx // from the image edge to the text
 )
-
-var outlineColor = color.NRGBA{A: 0xFF}
-
-// sizing is the pixel measures of a screenshot drawn at one font size. A bigger font gets
-// taller rows and a proportionally wider wrap, so lines wrap at the same words and the
-// whole image grows with the text.
-type sizing struct {
-	fontSize     int
-	lineHeight   int
-	maxTextWidth int
-}
-
-func sizingFor(fontSize int) sizing {
-	fontSize = ClampFontSize(fontSize)
-	return sizing{
-		fontSize:     fontSize,
-		lineHeight:   (fontSize*lineHeightPx + DefaultFontSize/2) / DefaultFontSize,
-		maxTextWidth: fontSize * maxTextWidthPx / DefaultFontSize,
-	}
-}
 
 // ErrNoLines is returned when there is nothing to draw.
 var ErrNoLines = errors.New("no lines to draw")
 
 // Render draws lines top to bottom, wrapping long ones, on a transparent image just big
-// enough to hold them. With a backdrop, each row gets a box hugging its text. The picture
-// also records where each character landed, for editing on the image.
+// enough to hold them, as the game's chat draws them. With a backdrop, each row gets a box
+// hugging its text. The picture also records where each character landed, for editing on
+// the image.
 func Render(lines []Line, style Style) (*Picture, error) {
 	if len(lines) == 0 {
 		return nil, ErrNoLines
 	}
-	size := sizingFor(style.FontSize)
-	size.maxTextWidth = ClampWidthLimit(style.WidthLimit, size.fontSize) - 2*marginPx
-	faces, err := newFaces(size.fontSize)
-	if err != nil {
-		return nil, err
-	}
-	defer faces.Close()
-
-	rows := layoutRows(faces, lines, size.maxTextWidth)
-	width := 0
+	geometry := geometryFor(style.Look)
+	faces := facesFor(geometry.look.Font, geometry.drawPx)
+	widthLimit := ClampWidthLimit(style.WidthLimit)
+	rows := layoutRows(faces, lines, float64(widthLimit-2*marginPx))
+	picture := &Picture{Look: geometry.look, rows: rows, grid: chatGrid(geometry)}
+	textRight := 0.0
 	for _, row := range rows {
-		width = max(width, row.width)
+		textRight = max(textRight, textOriginX+row.width)
 	}
-	canvas := image.NewRGBA(image.Rect(0, 0, width+2*marginPx, len(rows)*size.lineHeight+2*marginPx))
+	width := min(int(math.Ceil(textRight))+marginPx, widthLimit)
+	height := int(math.Ceil(picture.grid.rowTop(len(rows)))) + marginPx
+	picture.Image = image.NewRGBA(image.Rect(0, 0, width, height))
 	if style.Backdrop.A > 0 {
-		drawBackdrop(canvas, rows, size.lineHeight, style.Backdrop)
+		drawBackdrop(picture.Image, rows, picture.grid, style.Backdrop)
 	}
-	baselineOffset := (size.lineHeight + faces.regular.Metrics().CapHeight.Ceil()) / 2
+	ascent, descent := faces.regular.verticalMetrics()
+	baselineOffset := geometry.baselineOffset(ascent, descent)
 	for index, row := range rows {
-		origin := fixed.P(marginPx, marginPx+index*size.lineHeight+baselineOffset)
-		drawOutlinedRow(canvas, faces, row, origin)
+		baseline := int(math.Floor(picture.grid.rowTop(index) + baselineOffset + 0.5))
+		if err := drawRow(picture.Image, row, baseline); err != nil {
+			return nil, err
+		}
 	}
-	return &Picture{Image: canvas, FontSize: size.fontSize, rows: rows, lineHeight: size.lineHeight}, nil
+	return picture, nil
+}
+
+// textOriginX is where each row's text starts: the margin, plus the fraction of a pixel
+// the in-game chat's text starts at.
+const textOriginX = float64(marginPx) + chatTextLeftFraction
+
+// RowGrid is where a screenshot's rows of text are, in image pixels: the first row's top
+// and every row's height. Rows can start between pixels, as they do in game.
+type RowGrid struct {
+	Top, Height float64
+	// Reach is how far the text's shadow (or outline) reaches past its letters.
+	Reach int
+}
+
+// chatGrid is the grid Render draws a look on.
+func chatGrid(geometry chatGeometry) RowGrid {
+	return RowGrid{Top: float64(marginPx) + chatTextTopFraction, Height: geometry.lineHeight, Reach: shadowReachPx}
+}
+
+func (g RowGrid) rowTop(index int) float64 {
+	return g.Top + float64(index)*g.Height
+}
+
+// rowSpan is the whole pixels row index covers: from its top to the next row's top.
+func (g RowGrid) rowSpan(index int) (top, bottom int) {
+	return int(math.Round(g.rowTop(index))), int(math.Round(g.rowTop(index + 1)))
+}
+
+// drawRow draws a row's text with its baseline at y baseline: run by run (characters of
+// one color and style, as the game's chat puts them in one element), each run's shadow and
+// then its glyphs.
+func drawRow(canvas *image.RGBA, row textRow, baseline int) error {
+	for start := 0; start < len(row.chars); {
+		end := start + 1
+		for end < len(row.chars) && sameRun(row.chars[start].char, row.chars[end].char) {
+			end++
+		}
+		glyphs, err := placeGlyphs(row.chars[start:end], baseline)
+		if err != nil {
+			return err
+		}
+		drawShadow(canvas, glyphs)
+		drawGlyphs(canvas, glyphs, row.chars[start].char.Color)
+		start = end
+	}
+	return nil
+}
+
+func sameRun(a, b Char) bool {
+	return a.Color == b.Color && a.IsItalic == b.IsItalic
+}
+
+// placeGlyphs draws each character's glyph where it lands: its x rounded to the nearest
+// quarter pixel, as Chromium does.
+func placeGlyphs(chars []placedChar, baseline int) ([]placedGlyph, error) {
+	var glyphs []placedGlyph
+	for _, placed := range chars {
+		if placed.face == nil {
+			continue
+		}
+		quarters := int(math.Floor((textOriginX+placed.x)*subpixelSteps + 0.5))
+		penX := floorDiv(quarters, subpixelSteps)
+		mask, err := glyphMask(placed.face, placed.glyph, quarters-penX*subpixelSteps)
+		if err != nil {
+			return nil, fmt.Errorf("draw %q: %w", placed.char.R, err)
+		}
+		if !mask.Rect.Empty() {
+			glyphs = append(glyphs, placedGlyph{mask: mask, origin: image.Pt(penX, baseline)})
+		}
+	}
+	return glyphs, nil
+}
+
+func floorDiv(a, b int) int {
+	q := a / b
+	if a%b != 0 && (a < 0) != (b < 0) {
+		q--
+	}
+	return q
+}
+
+// drawGlyphs draws the glyphs in c, each through c's coverage table.
+func drawGlyphs(canvas *image.RGBA, glyphs []placedGlyph, c color.NRGBA) {
+	table := coverageTable(c)
+	paint := image.NewUniform(c)
+	for _, g := range glyphs {
+		tinted := image.NewAlpha(g.bounds())
+		for i, v := range g.mask.Pix {
+			tinted.Pix[i] = table[v]
+		}
+		draw.DrawMask(canvas, tinted.Rect, paint, image.Point{}, tinted, tinted.Rect.Min, draw.Over)
+	}
 }
 
 // drawBackdrop fills one box per row with text, each as wide as that row's text plus
 // padding. Rows sit flush, so a block of lines reads as one stepped shape, like the
 // Chatlog Magician's per-line background.
-func drawBackdrop(canvas *image.RGBA, rows []textRow, lineHeight int, backdrop color.NRGBA) {
+func drawBackdrop(canvas *image.RGBA, rows []textRow, grid RowGrid, backdrop color.NRGBA) {
 	fill := image.NewUniform(backdrop)
 	for index, row := range rows {
-		if len(row.chars) > 0 {
-			draw.Draw(canvas, rowBox(index, row.width, lineHeight), fill, image.Point{}, draw.Src)
+		if len(row.chars) == 0 {
+			continue
 		}
+		top, bottom := grid.rowSpan(index)
+		left := int(math.Floor(textOriginX)) - backdropPaddingPx
+		right := int(math.Ceil(textOriginX+row.width)) + backdropPaddingPx
+		draw.Draw(canvas, image.Rect(left, top, right, bottom), fill, image.Point{}, draw.Src)
 	}
 }
 
-// rowBox is the backdrop box of the row at index whose text is width pixels wide.
-func rowBox(index, width, lineHeight int) image.Rectangle {
-	top := marginPx + index*lineHeight
-	return image.Rect(marginPx-backdropPaddingPx, top, marginPx+width+backdropPaddingPx, top+lineHeight)
-}
-
-// RowBoxes finds the backdrop boxes of an image Render drew at fontSize: one per row that
-// has text, placed as Render places them. It lets a viewer show a backdrop behind
-// screenshots saved without one.
-func RowBoxes(img image.Image, fontSize int) []image.Rectangle {
-	lineHeight := sizingFor(fontSize).lineHeight
+// RowBoxes finds the backdrop boxes of an image drawn on grid: one per row that has text,
+// placed as Render places them. It lets a viewer show a backdrop behind screenshots saved
+// without one.
+func RowBoxes(img image.Image, grid RowGrid) []image.Rectangle {
 	bounds := img.Bounds()
 	var boxes []image.Rectangle
-	for top := bounds.Min.Y + marginPx; top+lineHeight <= bounds.Max.Y-marginPx; top += lineHeight {
-		left, right, hasInk := inkRange(img, top, top+lineHeight)
+	for index := 0; ; index++ {
+		top, bottom := grid.rowSpan(index)
+		top, bottom = top+bounds.Min.Y, bottom+bounds.Min.Y
+		if bottom > bounds.Max.Y-marginPx || grid.Height <= 0 {
+			return boxes
+		}
+		left, right, hasInk := inkRange(img, top, bottom)
 		if !hasInk {
 			continue
 		}
-		// The ink includes the outline, which reaches outlinePx past the text.
-		box := image.Rect(left+outlinePx-backdropPaddingPx, top, right-outlinePx+backdropPaddingPx, top+lineHeight)
+		// The ink includes the shadow, which reaches past the text.
+		box := image.Rect(left+grid.Reach-backdropPaddingPx, top, right-grid.Reach+backdropPaddingPx, bottom)
 		boxes = append(boxes, box.Intersect(bounds))
 	}
-	return boxes
 }
 
 // inkRange returns the leftmost and one-past-rightmost x of non-transparent pixels in the
@@ -185,31 +239,4 @@ func inkRange(img image.Image, top, bottom int) (left, right int, hasInk bool) {
 		}
 	}
 	return left, right, left < right
-}
-
-// drawOutlinedRow draws the row in black at every neighboring offset, then in its own
-// colors on top.
-func drawOutlinedRow(canvas *image.RGBA, faces *faces, row textRow, origin fixed.Point26_6) {
-	for dy := -outlinePx; dy <= outlinePx; dy++ {
-		for dx := -outlinePx; dx <= outlinePx; dx++ {
-			if dx == 0 && dy == 0 {
-				continue
-			}
-			drawRow(canvas, faces, row, origin.Add(fixed.P(dx, dy)), func(Char) color.NRGBA { return outlineColor })
-		}
-	}
-	drawRow(canvas, faces, row, origin, func(c Char) color.NRGBA { return c.Color })
-}
-
-// drawRow draws each of the row's characters at its place, in colorOf(char).
-func drawRow(canvas *image.RGBA, faces *faces, row textRow, origin fixed.Point26_6, colorOf func(Char) color.NRGBA) {
-	for _, placed := range row.chars {
-		drawer := &font.Drawer{
-			Dst:  canvas,
-			Src:  image.NewUniform(colorOf(placed.char)),
-			Face: faces.of(placed.char.IsItalic),
-			Dot:  origin.Add(fixed.Point26_6{X: placed.x}),
-		}
-		drawer.DrawString(string(placed.char.R))
-	}
 }

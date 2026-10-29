@@ -81,6 +81,7 @@ const (
 	// these values match the design's 12% tints.
 	lineSelectionOpacity = 0.07 // selected chat lines, light enough to keep chat colors readable
 	liveTintOpacity      = 0.06 // the background of status pills
+	lineDragOpacity      = 0.15 // a chat line being dragged on a screenshot preview
 )
 
 const appName = "WorldKit"
@@ -165,6 +166,9 @@ const (
 	swatchSize         = unit.Dp(22)
 	swatchRingWidth    = unit.Dp(2) // the ring around a hovered color swatch
 	caretWidth         = unit.Dp(1) // the caret when editing text on a screenshot preview
+	// lineGripWidth is the margin left of an edited preview that holds each line's grip.
+	lineGripWidth       = unit.Dp(20)
+	dropIndicatorHeight = unit.Dp(2) // the bar marking where a dragged line will land
 )
 
 // Screenshot Editor and Saved Screenshots.

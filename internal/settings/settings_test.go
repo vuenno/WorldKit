@@ -80,10 +80,10 @@ func TestExtractPresetsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	forum := ExtractPreset{Name: "Forum", Backdrop: "dark", FontSize: 16, WidthLimit: 500}
+	forum := ExtractPreset{Name: "Forum", Backdrop: "dark", ChatFont: "Mukta", ChatScale: 75, WidthLimit: 500}
 	err = store.Update(func(s *Settings) {
 		s.SaveExtractPreset(forum)
-		s.SaveExtractPreset(ExtractPreset{Name: "Big", Backdrop: "transparent", FontSize: 24})
+		s.SaveExtractPreset(ExtractPreset{Name: "Big", Backdrop: "transparent", ChatScale: 150})
 		s.DefaultExtractPreset = "Big"
 	})
 	if err != nil {

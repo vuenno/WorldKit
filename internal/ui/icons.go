@@ -59,6 +59,8 @@ const (
 	iconRotate       strokeIcon = "M21 4 V10 H15 M21 10 Q18 4 12 4 Q4 4 4 12 Q4 20 12 20 Q18 20 20 15"
 	iconChevronUp    strokeIcon = "M6 15 L12 9 L18 15"
 	iconAlert        strokeIcon = "M12 3 L22 20 H2 Z M12 9 V14 M12 17 V17.5"
+	iconGrip         strokeIcon = "O 9 6 0.6 O 15 6 0.6 O 9 12 0.6 O 15 12 0.6 O 9 18 0.6 O 15 18 0.6"
+	iconMerge        strokeIcon = "M6 3 V8 L12 14 V21 M18 3 V8 L12 14"
 )
 
 // iconStrokeWidth is the stroke width on the 24-unit grid.

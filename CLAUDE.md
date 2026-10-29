@@ -35,7 +35,8 @@ code, whenever the change is worth noting:
 - **Fonts:** Geist and Geist Mono, embedded from `assets/fonts` (OFL-1.1, keep `OFL.txt`
   next to them). The text shaper loads only these; never fall back to system fonts.
 - `golang.org/x/image` for high-quality image resampling (`draw.CatmullRom`), the editor's
-  rotated/scaled export (`draw.Transform`) and its BMP/WebP decoders.
+  rotated/scaled export (`draw.Transform`), its BMP/WebP decoders, and chat screenshots'
+  font parsing (`font/sfnt`) and outline rasterizing (`vector`).
 - `github.com/syndtr/goleveldb` (pulls in `github.com/golang/snappy`) to read FiveM's LevelDB
   key-value store, where GTA World keeps its chat log. Pure Go, read-only use, on a copy only.
 - `golang.org/x/sys/windows` (already required by Gio) for the registry (start with Windows) and
@@ -45,15 +46,24 @@ code, whenever the change is worth noting:
 - **User data** lives in `os.UserConfigDir()\WorldKit` (`%AppData%\WorldKit`): `settings.json`,
   `exports.json`, `logs\` and `screenshots\`. Chat logs are stored raw (one `.txt` per session) and parsed on
   read; never rewrite or reformat them in place. Screenshots are PNGs WorldKit renders itself
-  (`internal/screenshot`, pure Go via `golang.org/x/image/font`, no GPU); deletes only ever
+  (`internal/screenshot`, on the CPU, no GPU); deletes only ever
   touch that folder, or a Screenshot Editor export that `exports.json` lists and that is
   unchanged since export (same size and modification time, `exports.Index.Delete`). Exports
   are written where the user picks (default `Pictures\WorldKit`) and never copied.
-  Screenshot fonts, Arial Bold and Arial Bold Italic (`arialbd.ttf`,
-  `arialbi.ttf`), are read from `%WINDIR%\Fonts` (Go Bold / Go Bold Italic as fallback);
-  never bundle them (their license forbids redistribution). Chat markup (`/italic/`,
+  Screenshot fonts are the game's chat fonts: Arial Bold and Arial Bold Italic
+  (`arialbd.ttf`, `arialbi.ttf`), read from `%WINDIR%\Fonts` and drawn with DirectWrite
+  (`internal/directwrite`; Go Bold / Go Bold Italic as fallback) — never bundle them (their
+  license forbids redistribution) — and Mukta Regular (OFL), bundled in `assets/chatfonts`
+  with its `OFL.txt`, never loaded by the UI. Chat markup (`/italic/`,
   `*action*`) is parsed once into styled characters (`screenshot.Document`); edits change
   those characters, never the stored log text.
+- **Chat screenshots copy Chromium, measured.** Every number in `internal/screenshot`'s
+  chat.go, gamma.go, glyphs.go and shadow.go comes from GTA World's chat stylesheet (read
+  with FiveM's `nui_devtools`; dev mode: launch FiveM with `+set moo 31337`) or was fitted
+  to headless Chrome drawing that CSS on a transparent page. Don't change one by eye:
+  re-measure against Chrome (`chrome --headless=new --disable-gpu
+  --force-device-scale-factor=1 --default-background-color=00000000 --screenshot`) and
+  keep the tests' Chromium values passing.
 - Write user files through `internal/atomicfile` (temp file + rename), never in place.
 - **Diagnostics** go to `%AppData%\WorldKit\diagnostics\` (`internal/diagnostics`, started in
   `run.go`): `slog` output in `app.log` (previous run: `app.previous.log`) and unrecovered
@@ -124,7 +134,7 @@ assets/              embedded files (//go:embed). logo.png (384×384, transparen
   `titleBar`; drag areas use `moveArea` (`system.ActionInputOp(system.ActionMove)`). Never put a
   clickable inside a move area: Windows takes those clicks.
 - Icons are `strokeIcon` path strings in `internal/ui/icons.go`; add new ones there.
-- Windows APIs without a Go wrapper (e.g. the file dialogs, `internal/filedialog`) are called
+- Windows APIs without a Go wrapper (e.g. the file dialogs, `internal/filedialog`; DirectWrite, `internal/directwrite`) are called
   through COM/syscalls with `golang.org/x/sys/windows` in their own `internal/<name>` package,
   never CGO.
 - Images shown by Gio: make the `paint.ImageOp` once (from an `*image.RGBA`, which Gio
