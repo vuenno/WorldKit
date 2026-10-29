@@ -170,6 +170,7 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `cmd/worldkit/rsrc_windows_amd64.syso` | Generated exe icon + manifest; linked automatically by `go build` |
 | `.github/workflows/release.yml`        | Manual release: checks, versioned build, installer, tag + GitHub release |
 | `installer/worldkit.iss`               | Inno Setup script: per-user install, Start menu entry, uninstall keeps user data |
+| `README.md`, `docs/screenshots/`       | Public front page (logo, release badge, features, install); its images: chat images rendered by `screenshot.Render`, app screenshots and two RP scenes captured from WorldKit run with a throwaway `%APPDATA%` of made-up sessions (no real logs or names) |
 | `CLAUDE.md`                            | Code rules, commands, commit checklist                      |
 | `DESIGN.md`                            | Tokens, typography, components and every screen's layout    |
 | `.graphifyignore`, `graphify-out/`     | Knowledge-graph config and output (see below)               |
