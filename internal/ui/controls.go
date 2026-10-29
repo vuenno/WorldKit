@@ -127,11 +127,17 @@ func (s *numberStepper) Update(gtx layout.Context) bool {
 }
 
 // step moves the value by delta, staying within min..max.
+// With an increment, steps land on its multiples (914 + 50 → 950), so values stay round.
 func (s *numberStepper) step(delta int) {
-	if s.increment > 0 {
-		delta *= s.increment
+	value := s.value + delta
+	if inc := s.increment; inc > 0 {
+		if delta > 0 {
+			value = (s.value/inc + delta) * inc
+		} else {
+			value = ((s.value+inc-1)/inc + delta) * inc
+		}
 	}
-	s.value = max(s.min, min(s.value+delta, s.max))
+	s.value = max(s.min, min(value, s.max))
 }
 
 func (s *numberStepper) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensions {

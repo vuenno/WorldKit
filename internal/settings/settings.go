@@ -28,6 +28,11 @@ type Settings struct {
 	ExportPresets []ExportPreset `json:"exportPresets,omitempty"`
 	// DefaultPreset names the preset the export dialog starts with; empty: PNG, lossless.
 	DefaultPreset string `json:"defaultExportPreset,omitempty"`
+	// ExtractPresets are the user's saved looks for Extract image (background, font size,
+	// max width), in the order they were saved.
+	ExtractPresets []ExtractPreset `json:"extractPresets,omitempty"`
+	// DefaultExtractPreset names the preset Extract image starts with; empty: the defaults.
+	DefaultExtractPreset string `json:"defaultExtractPreset,omitempty"`
 }
 
 // ExportPreset is a saved combination of file format, quality and canvas size.
@@ -40,38 +45,81 @@ type ExportPreset struct {
 	Height     int    `json:"height"`
 }
 
-// Preset returns the preset called name.
-func (s Settings) Preset(name string) (ExportPreset, bool) {
-	for _, preset := range s.ExportPresets {
-		if preset.Name == name {
+// ExtractPreset is a saved look for chat screenshots made with Extract image.
+type ExtractPreset struct {
+	Name     string `json:"name"`
+	Backdrop string `json:"backdrop"` // "transparent", "dark" or "light"
+	FontSize int    `json:"fontSize"` // pixels
+	// WidthLimit is the image's max width in pixels; zero follows the font size (the
+	// in-game width).
+	WidthLimit int `json:"widthLimit,omitempty"`
+}
+
+func (p ExportPreset) presetName() string  { return p.Name }
+func (p ExtractPreset) presetName() string { return p.Name }
+
+// named is a preset, found by its name.
+type named interface{ presetName() string }
+
+func findPreset[T named](presets []T, name string) (T, bool) {
+	for _, preset := range presets {
+		if preset.presetName() == name {
 			return preset, true
 		}
 	}
-	return ExportPreset{}, false
+	var none T
+	return none, false
 }
 
-// SavePreset adds preset, replacing one with the same name.
+// savePreset adds preset, replacing one with the same name in place.
+func savePreset[T named](presets []T, preset T) []T {
+	for i := range presets {
+		if presets[i].presetName() == preset.presetName() {
+			presets[i] = preset
+			return presets
+		}
+	}
+	return append(presets, preset)
+}
+
+func deletePreset[T named](presets []T, name string) []T {
+	return slices.DeleteFunc(slices.Clone(presets), func(p T) bool { return p.presetName() == name })
+}
+
+// Preset returns the export preset called name.
+func (s Settings) Preset(name string) (ExportPreset, bool) {
+	return findPreset(s.ExportPresets, name)
+}
+
+// SavePreset adds an export preset, replacing one with the same name.
 func (s *Settings) SavePreset(preset ExportPreset) {
-	for i := range s.ExportPresets {
-		if s.ExportPresets[i].Name == preset.Name {
-			s.ExportPresets[i] = preset
-			return
-		}
-	}
-	s.ExportPresets = append(s.ExportPresets, preset)
+	s.ExportPresets = savePreset(s.ExportPresets, preset)
 }
 
-// DeletePreset removes the preset called name, and makes it no longer the default.
+// DeletePreset removes the export preset called name, and makes it no longer the default.
 func (s *Settings) DeletePreset(name string) {
-	kept := s.ExportPresets[:0:0]
-	for _, preset := range s.ExportPresets {
-		if preset.Name != name {
-			kept = append(kept, preset)
-		}
-	}
-	s.ExportPresets = kept
+	s.ExportPresets = deletePreset(s.ExportPresets, name)
 	if s.DefaultPreset == name {
 		s.DefaultPreset = ""
+	}
+}
+
+// ExtractPreset returns the extract preset called name.
+func (s Settings) ExtractPreset(name string) (ExtractPreset, bool) {
+	return findPreset(s.ExtractPresets, name)
+}
+
+// SaveExtractPreset adds an extract preset, replacing one with the same name.
+func (s *Settings) SaveExtractPreset(preset ExtractPreset) {
+	s.ExtractPresets = savePreset(s.ExtractPresets, preset)
+}
+
+// DeleteExtractPreset removes the extract preset called name, and makes it no longer the
+// default.
+func (s *Settings) DeleteExtractPreset(name string) {
+	s.ExtractPresets = deletePreset(s.ExtractPresets, name)
+	if s.DefaultExtractPreset == name {
+		s.DefaultExtractPreset = ""
 	}
 }
 
@@ -138,5 +186,6 @@ func writeFileAtomically(path string, settings Settings) error {
 // clone copies s so callers can change its presets without touching the stored ones.
 func (s Settings) clone() Settings {
 	s.ExportPresets = slices.Clone(s.ExportPresets)
+	s.ExtractPresets = slices.Clone(s.ExtractPresets)
 	return s
 }

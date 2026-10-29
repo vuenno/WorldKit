@@ -22,6 +22,31 @@ type Line struct {
 type Style struct {
 	Backdrop color.NRGBA // the box behind each row of text; zero (transparent): no box
 	FontSize int         // pixels, MinFontSize to MaxFontSize; zero: DefaultFontSize
+	// WidthLimit is the widest the image may be, in pixels (MinWidthLimit to
+	// MaxWidthLimit); longer lines wrap to fit. Zero: DefaultWidthLimit(FontSize), the
+	// in-game chat box's width.
+	WidthLimit int
+}
+
+// The width limits a screenshot can be drawn with, in pixels.
+const (
+	MinWidthLimit = 200
+	MaxWidthLimit = 1800
+)
+
+// DefaultWidthLimit is the in-game chat box's width at fontSize, as an image width: lines
+// wrap where they wrap in game.
+func DefaultWidthLimit(fontSize int) int {
+	return sizingFor(fontSize).maxTextWidth + 2*marginPx
+}
+
+// ClampWidthLimit returns limit within MinWidthLimit..MaxWidthLimit, and the default for
+// fontSize when limit is zero.
+func ClampWidthLimit(limit, fontSize int) int {
+	if limit == 0 {
+		return DefaultWidthLimit(fontSize)
+	}
+	return max(MinWidthLimit, min(limit, MaxWidthLimit))
 }
 
 // The font sizes a screenshot can be drawn at, in pixels. DefaultFontSize matches the
@@ -85,6 +110,7 @@ func Render(lines []Line, style Style) (*Picture, error) {
 		return nil, ErrNoLines
 	}
 	size := sizingFor(style.FontSize)
+	size.maxTextWidth = ClampWidthLimit(style.WidthLimit, size.fontSize) - 2*marginPx
 	faces, err := newFaces(size.fontSize)
 	if err != nil {
 		return nil, err

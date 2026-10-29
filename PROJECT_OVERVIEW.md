@@ -5,7 +5,7 @@ are. **Read this first, then `CLAUDE.md` (code rules) and `DESIGN.md` (visual ru
 Keep this file current: update it in the same change whenever features, structure or key
 decisions change.
 
-_Last updated: 2026-10-19_
+_Last updated: 2026-10-24_
 
 ## What it is
 
@@ -33,10 +33,10 @@ listed on the **Saved Screenshots** page.
 | Saved Screenshots| Done: every export (from `exports.json`) grouped by day: thumbnail, name, folder, size, format, file size; detail view; Show in folder; Delete (confirmed; only listed, unchanged files); missing files can be removed from the list |
 | Logs page        | Done: "Live now" card for the session being captured; sessions grouped Today / Yesterday / Earlier this week / month, each with start time, duration, characters, line count and a kind bar; search by character or date |
 | Log viewer       | Done: always-visible toolbar (find text, kind segments All/IC/me/do/b/PMs, Characters menu, timestamps switch), filter chips + Clear filters, timestamp column, drag/Shift+click/Ctrl+A/Esc selection, floating selection bar (Copy, **Extract image**, ×), toasts ("Screenshot saved · View" opens it) |
-| Extract dialog   | Done: **Extract image** opens a modal with a live preview, the Transparent/Dark/Light backdrop and a **Font size** stepper (10–24 px, default 14; the image grows with it); "Save as they are, or edit them first?" → **Edit** makes the preview itself editable: drag/Shift+click/Ctrl+A to select text on the image, **Italic**, a color picker (chat colors) and **Default** apply to it; click and type, Backspace/Delete/Enter, arrows/Home/End, Ctrl+Z undo |
+| Extract dialog   | Done: **Extract image** opens a modal with a live preview, the Transparent/Dark/Light backdrop a **Font size** stepper (10–24 px, default 14; the image grows with it) and **Max width** (200–1800 px; lines wrap to fit, default the in-game width, following the font size until changed); "Save as they are, or edit them first?" → **Edit** makes the preview itself editable: drag/Shift+click/Ctrl+A to select text on the image, **Italic**, a color picker (chat colors) and **Default** apply to it; click and type, Backspace/Delete/Enter, arrows/Home/End, Ctrl+Z undo; **presets** of background, font size and max width: pick one in the dialog, **Save as preset…**, the default one applies to the first extract |
 | Screenshot look  | Done: markup `/italic/` and `*action*` (in the /me color), markers removed; Dark/Light backdrops are a box behind each row of text, transparent elsewhere |
 | Log Screenshots  | Done: gallery grouped by day, checkerboard 1:1 previews, hover actions (Show in folder, Delete); detail view with a Transparent/Dark/Light preview (boxes behind the text rows) and details; delete with confirmation |
-| Settings page    | Done: capture status, FiveM data folder with **Browse…** (Windows folder dialog), start with Windows switch, Screenshot Editor card (export folder with Browse…, export presets: make default, delete), logs/screenshots folders |
+| Settings page    | Done: capture status, FiveM data folder with **Browse…** (Windows folder dialog), start with Windows switch, Log Screenshots card (extract presets: make default, delete), Screenshot Editor card (export folder with Browse…, export presets: make default, delete), logs/screenshots folders |
 | Branding         | Done: logo in sidebar header, exe/taskbar icon                         |
 | Chat capture     | Done: background polling of FiveM's KVS, one `.txt` per session, crash-safe appends |
 | Chat parsing     | Done: `chatlog.Parse` → records with time, kind, speaker, text; `chatlog.Filter`; `chatlog.Summarize` |
@@ -137,6 +137,9 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `internal/ui/screenshot_view.go`       | `screenshotView` (detail, backdrop boxes, details card), `backdropColor`, `shotDeletion` (confirm + delete) |
 | `internal/ui/settings_page.go`         | Settings page: `settingsCard`, `settingRow`, `pathRow`      |
 | `internal/ui/export_settings.go`       | Settings' Screenshot Editor card: export folder, presets    |
+| `internal/ui/extract_settings.go`      | Settings' Log Screenshots card: extract presets             |
+| `internal/ui/extract_presets.go`       | Extract dialog presets: apply, save, menu, descriptions     |
+| `internal/ui/preset_naming.go`         | `presetNaming`: "Save as preset…" link, name field, Save/Cancel |
 | `internal/ui/editor_page.go`           | `EditorPage`: toolbar, workspace, adding images, shortcuts, `confirmPrompt`, `layoutEnabled` |
 | `internal/ui/editor_doc.go`            | `editorDoc`: composition, history, selection, decoded layer images |
 | `internal/ui/editor_canvas.go`         | `canvasView`: fit/zoom/pan, drawing layers, selection frame, guides, gestures, keys |
@@ -283,6 +286,13 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   (`WorldKit:FontSize`, spliced in by pngtext.go because `image/png` can't write text
   chunks) so the gallery can find its rows; files without one were drawn at 14 px, the
   only size before. A file name suffix was the alternative; it breaks when users rename.
+- **Max width caps the image, defaulting to the in-game wrap.** Chat images were up to
+  ~914 px wide, wider than small canvases (500 × 500) in the Screenshot Editor. The limit is
+  an image width in pixels, since that is what has to fit; it follows the font size until
+  the user sets it, so the default still wraps where the game does. Over-long words break
+  between characters so the limit always holds. Manual breaks stay separate lines (Enter in
+  the picture editor), each wrapping on its own. It isn't recorded in the PNG: rows are found
+  from the font size alone.
 - **Screenshots live next to the logs** (`%AppData%\WorldKit\screenshots\`), flat, named by
   save time in UTC like session files (`2026-10-18_101530.png`, `_2` on collisions), written
   via a temp file + rename. `Store.Delete` refuses paths outside that folder. Previews are
@@ -418,9 +428,9 @@ graphify explain "Sidebar"
 - Log viewer: live-update the open session as new lines arrive (today it reads once on open),
   a search box for long character lists, colored tags inside a line (e.g. blue `[INFO]`).
 - Screenshots: **Copy image** to the clipboard (Gio's clipboard is text-only; needs Win32
-  `CF_PNG`/`CF_DIB`), link a screenshot back to its session, a wrap width option. Extract
-  dialog: a custom color besides the swatches, remember the backdrop and font size
-  between launches (`settings.json`); picture editor: double-click to select a word, Ctrl+C/Ctrl+V,
+  `CF_PNG`/`CF_DIB`), link a screenshot back to its session. Extract
+  dialog: a custom color besides the swatches, remember the last look between launches (today only a default preset
+  does); picture editor: double-click to select a word, Ctrl+C/Ctrl+V,
   Up/Down between rows, a blinking caret.
 - A second WorldKit instance exits with "keep previous app log … used by another process"
   (diagnostics start before the single-instance check) instead of saying it's already running.

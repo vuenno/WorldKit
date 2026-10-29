@@ -7,10 +7,8 @@ import (
 	"image"
 	"log/slog"
 	"path/filepath"
-	"strings"
 	"time"
 
-	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -47,39 +45,35 @@ type exportResult struct {
 // exportDialog picks the file format and quality (or a saved preset), saves the choices as
 // a preset, and exports: Save As, then render and encode in the background.
 type exportDialog struct {
-	isOpen         bool
-	dialog         dialog
-	presetMenu     dropdownMenu
-	presetName     string // the preset the choices came from; "" when changed since
-	fileType       *segmentedControl
-	pngMode        *segmentedControl
-	quality        *numberStepper
-	isNaming       bool
-	nameEditor     widget.Editor
-	startNaming    widget.Clickable
-	savePreset     widget.Clickable
-	cancelNaming   widget.Clickable
-	export         widget.Clickable
-	cancel         widget.Clickable
-	exporter       *backgroundLoad[exportResult]
-	errText        string
-	presetSavedFor string // a short confirmation after saving a preset
+	isOpen     bool
+	dialog     dialog
+	presetMenu dropdownMenu
+	presetName string // the preset the choices came from; "" when changed since
+	fileType   *segmentedControl
+	pngMode    *segmentedControl
+	quality    *numberStepper
+	naming     *presetNaming
+	export     widget.Clickable
+	cancel     widget.Clickable
+	exporter   *backgroundLoad[exportResult]
+	errText    string
 }
 
 func newExportDialog(invalidate func()) *exportDialog {
 	return &exportDialog{
-		fileType:   newSegmentedControl("PNG", "JPEG"),
-		pngMode:    newSegmentedControl("Lossless", "Smaller file"),
-		quality:    &numberStepper{value: compose.DefaultJPEGQuality, min: compose.MinQuality, max: compose.MaxQuality, increment: 5, unit: "%"},
-		nameEditor: widget.Editor{SingleLine: true, Submit: true, MaxLen: 40},
-		exporter:   newBackgroundLoad[exportResult](invalidate),
+		fileType: newSegmentedControl("PNG", "JPEG"),
+		pngMode:  newSegmentedControl("Lossless", "Smaller file"),
+		quality:  &numberStepper{value: compose.DefaultJPEGQuality, min: compose.MinQuality, max: compose.MaxQuality, increment: 5, unit: "%"},
+		naming:   newPresetNaming(),
+		exporter: newBackgroundLoad[exportResult](invalidate),
 	}
 }
 
 // Open shows the dialog. A preset picked with the canvas size sets the choices; otherwise
 // they stay as last used, or start from the default preset the first time.
 func (d *exportDialog) Open(store SettingsStore, preset string, isFirstOpen bool) {
-	d.isOpen, d.errText, d.isNaming, d.presetSavedFor = true, "", false, ""
+	d.isOpen, d.errText = true, ""
+	d.naming.Reset()
 	current := store.Get()
 	if preset == "" && isFirstOpen {
 		preset = current.DefaultPreset
@@ -169,29 +163,8 @@ func exportErrorText(err error) string {
 }
 
 func (d *exportDialog) updateNaming(gtx layout.Context, services Services, size image.Point) {
-	if d.startNaming.Clicked(gtx) {
-		d.isNaming, d.presetSavedFor = true, ""
-		d.nameEditor.SetText(defaultPresetName(d.format(), size))
-		gtx.Execute(key.FocusCmd{Tag: &d.nameEditor})
-	}
-	if d.cancelNaming.Clicked(gtx) {
-		d.isNaming = false
-	}
-	isSubmitted := false
-	for {
-		event, ok := d.nameEditor.Update(gtx)
-		if !ok {
-			break
-		}
-		if _, ok := event.(widget.SubmitEvent); ok {
-			isSubmitted = true
-		}
-	}
-	if !d.savePreset.Clicked(gtx) && !isSubmitted {
-		return
-	}
-	name := strings.TrimSpace(d.nameEditor.Text())
-	if name == "" {
+	name, ok := d.naming.Update(gtx, defaultPresetName(d.format(), size))
+	if !ok {
 		return
 	}
 	preset := newPreset(name, d.format(), size)
@@ -200,7 +173,8 @@ func (d *exportDialog) updateNaming(gtx layout.Context, services Services, size 
 		d.errText = "Couldn't save the preset."
 		return
 	}
-	d.isNaming, d.presetName, d.presetSavedFor = false, name, name
+	d.presetName = name
+	d.naming.Saved(name)
 }
 
 func newPreset(name string, format compose.Format, size image.Point) settings.ExportPreset {
@@ -333,7 +307,7 @@ func (d *exportDialog) layoutOptions(gtx layout.Context, theme *material.Theme, 
 			return label.Layout(gtx)
 		})
 	}
-	row(func(gtx layout.Context) layout.Dimensions { return d.layoutPresetSaving(gtx, theme) })
+	row(func(gtx layout.Context) layout.Dimensions { return d.naming.Layout(gtx, theme) })
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
 
@@ -378,34 +352,6 @@ func (d *exportDialog) qualityHint() string {
 		return "Always lossy; 100% loses the least."
 	}
 	return "Lower keeps fewer colors."
-}
-
-// layoutPresetSaving is the "Save as preset…" link, or while naming, the name field with
-// Save and Cancel. A preset keeps the format, quality and this canvas size.
-func (d *exportDialog) layoutPresetSaving(gtx layout.Context, theme *material.Theme) layout.Dimensions {
-	row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}
-	if !d.isNaming {
-		return row.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return linkButton{click: &d.startNaming, label: "Save as preset…"}.Layout(gtx, theme)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if d.presetSavedFor == "" {
-					return layout.Dimensions{}
-				}
-				return layout.Inset{Left: spacingMedium}.Layout(gtx, caption(theme, "Saved “"+d.presetSavedFor+"”. Find it in Settings.").Layout)
-			}),
-		)
-	}
-	return row.Layout(gtx,
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return textField{editor: &d.nameEditor, hint: "Preset name", height: controlHeightSmall}.Layout(gtx, theme)
-		}),
-		layout.Rigid(layout.Spacer{Width: spacingSmall}.Layout),
-		layout.Rigid(secondaryButton(&d.savePreset, "Save preset").withHeight(controlHeightSmall).Widget(theme)),
-		layout.Rigid(layout.Spacer{Width: spacingTiny}.Layout),
-		layout.Rigid(ghostButton(&d.cancelNaming, "Cancel").Widget(theme)),
-	)
 }
 
 func (d *exportDialog) layoutButtons(gtx layout.Context, theme *material.Theme) layout.Dimensions {
