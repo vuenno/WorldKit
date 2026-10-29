@@ -22,6 +22,7 @@ type SettingsPage struct {
 	openScreenshots  widget.Clickable
 	dataDirForm      *dataDirForm
 	exportSettings   *exportSettings
+	extractSettings  *extractSettings
 	startupSwitch    toggleSwitch
 	startupErrorText string
 }
@@ -30,9 +31,10 @@ type SettingsPage struct {
 // invalidate redraws the window when the folder picker closes.
 func NewSettingsPage(invalidate func()) *SettingsPage {
 	return &SettingsPage{
-		list:           widget.List{List: layout.List{Axis: layout.Vertical}},
-		dataDirForm:    newDataDirForm(invalidate, buttonSecondary),
-		exportSettings: newExportSettings(invalidate),
+		list:            widget.List{List: layout.List{Axis: layout.Vertical}},
+		dataDirForm:     newDataDirForm(invalidate, buttonSecondary),
+		exportSettings:  newExportSettings(invalidate),
+		extractSettings: newExtractSettings(),
 	}
 }
 
@@ -61,6 +63,9 @@ func (p *SettingsPage) Layout(gtx layout.Context, theme *material.Theme, service
 		sections = append(sections, func(gtx layout.Context) layout.Dimensions { return p.layoutStartupSection(gtx, theme) })
 	}
 	sections = append(sections,
+		func(gtx layout.Context) layout.Dimensions {
+			return p.extractSettings.Layout(gtx, theme, services.Settings)
+		},
 		func(gtx layout.Context) layout.Dimensions { return p.exportSettings.Layout(gtx, theme, services) },
 		func(gtx layout.Context) layout.Dimensions { return p.layoutFilesSection(gtx, theme, services) },
 		styledLabel(theme, textSizeCaption, font.Normal, colorTextTertiary,

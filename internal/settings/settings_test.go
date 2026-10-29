@@ -73,3 +73,32 @@ func TestGetReturnsACopy(t *testing.T) {
 		t.Errorf("stored preset changed through a copy: %q", name)
 	}
 }
+
+func TestExtractPresetsRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	store, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forum := ExtractPreset{Name: "Forum", Backdrop: "dark", FontSize: 16, WidthLimit: 500}
+	err = store.Update(func(s *Settings) {
+		s.SaveExtractPreset(forum)
+		s.SaveExtractPreset(ExtractPreset{Name: "Big", Backdrop: "transparent", FontSize: 24})
+		s.DefaultExtractPreset = "Big"
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := reopened.Get()
+	if found, ok := got.ExtractPreset("Forum"); !ok || found != forum {
+		t.Errorf("ExtractPreset(Forum) = %+v, %v; want %+v", found, ok, forum)
+	}
+	got.DeleteExtractPreset("Big")
+	if len(got.ExtractPresets) != 1 || got.DefaultExtractPreset != "" {
+		t.Errorf("after deleting the default: %+v", got)
+	}
+}

@@ -134,6 +134,7 @@ func (p *LogsPage) open(entry sessionEntry, services Services, isLive bool) {
 		isLive:      isLive,
 		library:     services.Logs,
 		screenshots: services.Screenshots,
+		settings:    services.Settings,
 		invalidate:  p.invalidate,
 	})
 }

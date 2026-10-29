@@ -22,6 +22,18 @@ type presetRowState struct {
 	remove      widget.Clickable
 }
 
+// presetRows keeps each preset row's state by preset name.
+type presetRows map[string]*presetRowState
+
+func (r presetRows) row(name string) *presetRowState {
+	state := r[name]
+	if state == nil {
+		state = &presetRowState{}
+		r[name] = state
+	}
+	return state
+}
+
 // exportSettings is the Settings card for the Screenshot Editor: where Export… opens and
 // the saved presets (made from the export dialog; here they are made the default or
 // deleted).
@@ -31,24 +43,15 @@ type exportSettings struct {
 	picker       *backgroundLoad[string]
 	hasPrefilled bool
 	errorText    string
-	rows         map[string]*presetRowState
+	rows         presetRows
 }
 
 func newExportSettings(invalidate func()) *exportSettings {
 	return &exportSettings{
 		folder: widget.Editor{SingleLine: true, Submit: true},
 		picker: newBackgroundLoad[string](invalidate),
-		rows:   map[string]*presetRowState{},
+		rows:   presetRows{},
 	}
-}
-
-func (e *exportSettings) row(name string) *presetRowState {
-	state := e.rows[name]
-	if state == nil {
-		state = &presetRowState{}
-		e.rows[name] = state
-	}
-	return state
 }
 
 func (e *exportSettings) update(gtx layout.Context, services Services) {
@@ -68,7 +71,7 @@ func (e *exportSettings) update(gtx layout.Context, services Services) {
 	}
 	current := services.Settings.Get()
 	for _, preset := range current.ExportPresets {
-		state := e.row(preset.Name)
+		state := e.rows.row(preset.Name)
 		name := preset.Name
 		if state.makeDefault.Clicked(gtx) {
 			e.changeSettings(services, func(s *settings.Settings) { s.DefaultPreset = name })
@@ -172,26 +175,27 @@ func (e *exportSettings) layoutPresets(gtx layout.Context, theme *material.Theme
 		children = append(children,
 			layout.Rigid(layout.Spacer{Height: spacingMedium}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return e.layoutPresetRow(gtx, theme, preset, preset.Name == current.DefaultPreset)
+				details := fmt.Sprintf("%s · %d × %d", presetFormat(preset).Describe(), preset.Width, preset.Height)
+				return layoutPresetRow(gtx, theme, e.rows.row(preset.Name), preset.Name, details, preset.Name == current.DefaultPreset)
 			}))
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
 
-func (e *exportSettings) layoutPresetRow(gtx layout.Context, theme *material.Theme, preset settings.ExportPreset, isDefault bool) layout.Dimensions {
-	state := e.row(preset.Name)
+// layoutPresetRow is one saved preset in Settings: its name over details (Geist Mono), the
+// Default pill or Make default, and Delete.
+func layoutPresetRow(gtx layout.Context, theme *material.Theme, state *presetRowState, name, details string, isDefault bool) layout.Dimensions {
 	row := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}
 	return row.Layout(gtx,
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					label := styledLabel(theme, textSizeBody, font.Medium, colorTextPrimary, preset.Name)
+					label := styledLabel(theme, textSizeBody, font.Medium, colorTextPrimary, name)
 					label.MaxLines = 1
 					return label.Layout(gtx)
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					text := fmt.Sprintf("%s · %d × %d", presetFormat(preset).Describe(), preset.Width, preset.Height)
-					label := monoText(theme, textSizeCaption, text)
+					label := monoText(theme, textSizeCaption, details)
 					label.Color = colorTextSecondary
 					return label.Layout(gtx)
 				}),

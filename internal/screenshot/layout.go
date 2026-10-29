@@ -49,7 +49,29 @@ func wrapChars(faces *faces, chars []Char, maxWidth int) [][]int {
 		rows = append(rows, current)
 		current = word[1:] // a wrapped row doesn't start with the space it wrapped at
 	}
-	return append(rows, current)
+	return breakLongWords(faces, chars, append(rows, current), maxWidth)
+}
+
+// breakLongWords splits rows still wider than maxWidth (a single word longer than the
+// limit) between characters, so the image never grows past its width limit.
+func breakLongWords(faces *faces, chars []Char, rows [][]int, maxWidth int) [][]int {
+	var fitted [][]int
+	for _, row := range rows {
+		if placeRow(faces, chars, row, 0).width <= maxWidth {
+			fitted = append(fitted, row)
+			continue
+		}
+		start := 0
+		for end := 1; end <= len(row); end++ {
+			isTooWide := placeRow(faces, chars, row[start:end], 0).width > maxWidth
+			if isTooWide && end-1 > start { // at least one character per row
+				fitted = append(fitted, row[start:end-1])
+				start = end - 1
+			}
+		}
+		fitted = append(fitted, row[start:])
+	}
+	return fitted
 }
 
 // splitWords groups character indices into words; every word after the first starts with

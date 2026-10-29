@@ -321,7 +321,17 @@ up to `extractDialogWidth` (720 dp) over the log viewer.
   Light put a box behind each line." (one line).
 - 8 dp below: "Font size" + number stepper **− 14 px +** (10–24 px) + caption "A bigger
   font makes a bigger image." Option labels sit in an `optionLabelWidth` column so the
-  controls line up. Both choices stay for the next extract.
+  controls line up.
+- 8 dp below: "Max width" + number stepper **− 914 px +** (200–1800 px, steps of 50 landing
+  on round values) + caption "Longer lines wrap to fit. Use Edit to break lines yourself."
+  (while editing: "… Press Enter for a break of your own."). It follows the font size (the
+  in-game width) until the user picks a width. All three choices stay for the next extract.
+- **Presets** (once any is saved): a "Preset" row above Background with a dropdown of the
+  saved looks (name, font size; "Custom" once a choice changes) and caption "A saved
+  background, font size and width." The first Extract in a log starts with the default
+  preset from Settings. 12 dp below Max width: **Save as preset…** (`presetNaming`, as in
+  the export dialog) saves background, font size and max width; a width still following
+  the font size is saved as "in-game width".
 - The body scrolls; the buttons stay in view 24 dp below it: primary **Save image** (image
   icon), secondary **Edit** (pencil icon; hidden once editing), secondary **Cancel**.
 - Italic, colors and Default act on the selection, or on all the text with nothing
@@ -335,7 +345,10 @@ What Extract image writes: a PNG players lay over game screenshots, styled like 
   **Arial Bold Italic** (`arialbi.ttf`). Bundled Go Bold / Go Bold Italic if those fail.
 - Size: picked per extract, **10–24 px**, default **14 px** (the in-game chat). At 14 px:
   18 px line height and a 900 px wrap; both scale with the font (line height rounded), so
-  lines wrap at the same words and the image grows with the text. Fixed at every size:
+  lines wrap at the same words and the image grows with the text. **Max width** (200–1800 px,
+  default that in-game width plus the 7 px margins) caps the image: lines wrap at spaces to
+  fit, and a word longer than the limit breaks between characters, so the image is never
+  wider. Lines broken by hand (Enter while editing) always start a new row. Fixed at every size:
   6 px padding, each line in its chat color with a 1 px black outline (drawn at the 8
   neighboring offsets) so it reads over any picture. Wrapped lines keep their colors. The
   image is just big enough for the text. Pixel values (not dp/sp) because they describe
@@ -374,6 +387,9 @@ What Extract image writes: a PNG players lay over game screenshots, styled like 
     (Geist Mono) + **Browse…** (opens Windows' folder dialog; Enter in the field saves a
     typed path), hint caption.
   - **Startup**: "Start with Windows" + description, switch at the right.
+  - **Log Screenshots**: "Extract presets" with a caption, then a row per preset (name,
+    Geist Mono "Dark · 16 px · max 500 px" or "… · in-game width", Default pill or ghost
+    **Make default**, ghost danger delete), "No presets yet." when empty.
   - **Screenshot Editor**: "Export folder" path field (Geist Mono, hint = the default
     `Pictures\WorldKit`) + **Browse…**; Enter saves a typed path, an emptied field goes back to
     the default. Then "Export presets": one row per preset (name, Geist Mono "JPEG · 90% ·
@@ -447,7 +463,7 @@ stays when the user switches pages; the nav icon shows a badge while there are l
   column, one-line hints): **Preset** dropdown (when presets exist; "Custom" once changed),
   **Format** PNG · JPEG, for PNG **Quality** Lossless · Smaller file, then **Colors** (PNG
   smaller) or **Quality** (JPEG) stepper 10–100 % in 5 % steps (JPEG default 92). JPEG over a
-  transparent canvas warns in `colorWarning`. Link **Save as preset…** opens a name field +
+  transparent canvas warns in `colorWarning`. Link **Save as preset…** (`presetNaming`, shared with Extract image) opens a name field +
   **Save preset** / Cancel. Primary **Export…** ("Exporting…" while busy) opens Save As
   offering only the chosen format, named `worldkit-<UTC time>`, in the last export folder
   (else the Settings folder). Done: toast "Exported <name> · **Show in folder**".

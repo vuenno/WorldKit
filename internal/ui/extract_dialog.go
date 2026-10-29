@@ -36,22 +36,38 @@ type extractDialog struct {
 	editor     pictureEditor
 	backdrop   *segmentedControl
 	fontSize   *numberStepper
-	save       widget.Clickable
-	edit       widget.Clickable
-	cancel     widget.Clickable
-	italic     widget.Clickable
-	resetColor widget.Clickable
-	swatches   []widget.Clickable // one per textSwatches color
-	body       widget.List
-	renderer   *backgroundLoad[*screenshot.Picture]
-	errText    string
+	widthLimit *numberStepper
+	// hasChosenWidth is set once the user picks a width; until then it follows the font
+	// size, so lines wrap as they do in game.
+	hasChosenWidth bool
+	settings       SettingsStore // where extract presets are kept
+	presetMenu     dropdownMenu
+	presetName     string // the preset the choices came from; "" once changed
+	naming         *presetNaming
+	hasOpened      bool
+	save           widget.Clickable
+	edit           widget.Clickable
+	cancel         widget.Clickable
+	italic         widget.Clickable
+	resetColor     widget.Clickable
+	swatches       []widget.Clickable // one per textSwatches color
+	body           widget.List
+	renderer       *backgroundLoad[*screenshot.Picture]
+	errText        string
 }
 
-func newExtractDialog(invalidate func()) *extractDialog {
+// newExtractDialog creates the dialog; its presets are read from and saved to settings.
+func newExtractDialog(invalidate func(), settings SettingsStore) *extractDialog {
 	return &extractDialog{
+		settings: settings,
+		naming:   newPresetNaming(),
 		dialog:   dialog{width: extractDialogWidth},
-		backdrop: newSegmentedControl("Transparent", "Dark", "Light"),
+		backdrop: newSegmentedControl(backdropLabels...),
 		fontSize: newNumberStepper(screenshot.DefaultFontSize, screenshot.MinFontSize, screenshot.MaxFontSize, "px"),
+		widthLimit: &numberStepper{
+			value: screenshot.DefaultWidthLimit(screenshot.DefaultFontSize),
+			min:   screenshot.MinWidthLimit, max: screenshot.MaxWidthLimit, increment: widthLimitStep, unit: "px",
+		},
 		swatches: make([]widget.Clickable, len(textSwatches)),
 		body:     widget.List{List: layout.List{Axis: layout.Vertical}},
 		renderer: newBackgroundLoad[*screenshot.Picture](invalidate),
@@ -59,9 +75,15 @@ func newExtractDialog(invalidate func()) *extractDialog {
 }
 
 // Open shows the dialog for lines, unedited, their markup (/italic/, *action*) applied.
-// The backdrop and font size stay as last chosen.
+// The look (background, font size, max width) stays as last chosen; the first time it
+// comes from the default preset, if one is set in Settings.
 func (d *extractDialog) Open(lines []chatLine) {
 	d.isOpen, d.isEditing, d.errText = true, false, ""
+	d.naming.Reset()
+	if !d.hasOpened {
+		d.hasOpened = true
+		d.applyPresetNamed(d.settings.Get().DefaultExtractPreset)
+	}
 	shotLines := make([]screenshot.Line, len(lines))
 	for i, line := range lines {
 		shotLines[i] = screenshot.NewLine(line.copyText, line.color, colorChatEmote)
@@ -77,7 +99,7 @@ func (d *extractDialog) Lines() []screenshot.Line {
 
 // Style returns the chosen backdrop and font size.
 func (d *extractDialog) Style() screenshot.Style {
-	return screenshot.Style{Backdrop: backdropColor(d.backdrop.selected), FontSize: d.fontSize.value}
+	return screenshot.Style{Backdrop: backdropColor(d.backdrop.selected), FontSize: d.fontSize.value, WidthLimit: d.widthLimit.value}
 }
 
 // renderPreview draws every line, empty ones included, so rows on the picture match the
@@ -108,8 +130,13 @@ func (d *extractDialog) Update(gtx layout.Context) extractOutcome {
 		return extractPending
 	}
 	d.receivePreview()
-	isChanged := d.backdrop.Update(gtx)
-	isChanged = d.fontSize.Update(gtx) || isChanged
+	isChanged := d.updatePresets(gtx)
+	isLookChanged := d.backdrop.Update(gtx)
+	isLookChanged = d.updateSize(gtx) || isLookChanged
+	if isLookChanged {
+		d.presetName = "" // the look no longer matches the preset
+		isChanged = true
+	}
 	isChanged = d.editor.Update(gtx) || isChanged
 	isChanged = d.updateTools(gtx) || isChanged
 	if isChanged {
@@ -128,6 +155,30 @@ func (d *extractDialog) Update(gtx layout.Context) extractOutcome {
 		return extractSaveRequested
 	}
 	return extractPending
+}
+
+// widthLimitStep is how far one click moves Max width, in image pixels.
+const widthLimitStep = 50
+
+// updateSize handles the font size and Max width steppers and reports a change.
+func (d *extractDialog) updateSize(gtx layout.Context) bool {
+	if d.widthLimit.Update(gtx) {
+		d.hasChosenWidth = true
+		return true
+	}
+	if !d.fontSize.Update(gtx) {
+		return false
+	}
+	d.followFontSize()
+	return true
+}
+
+// followFontSize keeps Max width at the in-game width for the font size until the user
+// picks a width of their own.
+func (d *extractDialog) followFontSize() {
+	if !d.hasChosenWidth {
+		d.widthLimit.value = screenshot.DefaultWidthLimit(d.fontSize.value)
+	}
 }
 
 // updateTools applies Italic, a color or Default to the editor's selection.
@@ -187,16 +238,20 @@ func (d *extractDialog) Layout(gtx layout.Context, theme *material.Theme) {
 	})
 }
 
-// Body rows: the tools while editing, the preview, then the backdrop and font size choices.
+// Body rows: the tools while editing, the preview, then the look: preset, background, font
+// size and max width, and Save as preset.
 const (
 	extractRowTools = iota
 	extractRowPreview
+	extractRowPreset
 	extractRowBackdrop
 	extractRowFontSize
+	extractRowWidthLimit
+	extractRowPresetNaming
 )
 
 func (d *extractDialog) layoutBody(gtx layout.Context, theme *material.Theme) layout.Dimensions {
-	return styledList(theme, &d.body).Layout(gtx, extractRowFontSize+1, func(gtx layout.Context, index int) layout.Dimensions {
+	return styledList(theme, &d.body).Layout(gtx, extractRowPresetNaming+1, func(gtx layout.Context, index int) layout.Dimensions {
 		switch index {
 		case extractRowTools:
 			if !d.isEditing {
@@ -207,16 +262,34 @@ func (d *extractDialog) layoutBody(gtx layout.Context, theme *material.Theme) la
 			})
 		case extractRowPreview:
 			return d.layoutPreview(gtx, theme)
+		case extractRowPreset:
+			return d.layoutPresetRow(gtx, theme)
 		case extractRowBackdrop:
 			return layout.Inset{Top: spacingMedium}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layoutOptionRow(gtx, theme, "Background", d.backdrop.Layout, "Dark and Light put a box behind each line.")
 			})
-		default:
+		case extractRowFontSize:
 			return layout.Inset{Top: spacingSmall}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layoutOptionRow(gtx, theme, "Font size", d.fontSize.Layout, "A bigger font makes a bigger image.")
 			})
+		case extractRowWidthLimit:
+			return layout.Inset{Top: spacingSmall}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layoutOptionRow(gtx, theme, "Max width", d.widthLimit.Layout, d.widthLimitHint())
+			})
+		default:
+			return layout.Inset{Top: spacingMedium}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return d.naming.Layout(gtx, theme)
+			})
 		}
 	})
+}
+
+// widthLimitHint explains Max width, and how to break lines by hand while editing.
+func (d *extractDialog) widthLimitHint() string {
+	if d.isEditing {
+		return "Longer lines wrap to fit. Press Enter for a break of your own."
+	}
+	return "Longer lines wrap to fit. Use Edit to break lines yourself."
 }
 
 // layoutPreview draws the picture editor on a checkerboard, as the image will be saved.

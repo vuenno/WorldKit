@@ -9,10 +9,11 @@ import (
 	"gioui.org/io/key"
 
 	"world-kit/internal/screenshot"
+	"world-kit/internal/settings"
 )
 
 func newOpenExtractDialog(lines ...chatLine) *extractDialog {
-	d := newExtractDialog(func() {})
+	d := newExtractDialog(func() {}, &memorySettings{})
 	d.Open(lines)
 	d.isEditing, d.editor.isEditable = true, true
 	return d
@@ -48,7 +49,7 @@ func TestExtractDialogStyle(t *testing.T) {
 		{backdropLight, colorBackdropLight},
 	}
 	for _, test := range tests {
-		d := newExtractDialog(func() {})
+		d := newExtractDialog(func() {}, &memorySettings{})
 		d.backdrop.selected = test.backdrop
 		if got := d.Style().Backdrop; got != test.want {
 			t.Errorf("backdrop %d: Style().Backdrop = %v, want %v", test.backdrop, got, test.want)
@@ -147,7 +148,7 @@ func TestFittedSize(t *testing.T) {
 }
 
 func TestExtractDialogStyleFontSize(t *testing.T) {
-	d := newExtractDialog(func() {})
+	d := newExtractDialog(func() {}, &memorySettings{})
 	if got := d.Style().FontSize; got != screenshot.DefaultFontSize {
 		t.Errorf("default Style().FontSize = %d, want %d", got, screenshot.DefaultFontSize)
 	}
@@ -173,5 +174,83 @@ func TestNumberStepperStaysInRange(t *testing.T) {
 		if s.value != test.want {
 			t.Errorf("%d%+d = %d, want %d", test.start, test.delta, s.value, test.want)
 		}
+	}
+}
+
+func TestNumberStepperLandsOnIncrements(t *testing.T) {
+	tests := []struct {
+		start, delta, want int
+	}{
+		{914, 1, 950},
+		{914, -1, 900},
+		{900, -1, 850},
+		{900, 1, 950},
+		{220, -1, 200}, // stays at the minimum
+	}
+	for _, test := range tests {
+		s := &numberStepper{value: test.start, min: 200, max: 1800, increment: 50}
+		s.step(test.delta)
+		if s.value != test.want {
+			t.Errorf("%d%+d = %d, want %d", test.start, test.delta, s.value, test.want)
+		}
+	}
+}
+
+func TestExtractWidthFollowsFontSizeUntilChosen(t *testing.T) {
+	d := newExtractDialog(func() {}, &memorySettings{})
+	if got := d.Style().WidthLimit; got != screenshot.DefaultWidthLimit(screenshot.DefaultFontSize) {
+		t.Fatalf("default WidthLimit = %d, want the in-game width", got)
+	}
+	d.fontSize.step(4)
+	d.followFontSize()
+	if got, want := d.Style().WidthLimit, screenshot.DefaultWidthLimit(screenshot.DefaultFontSize+4); got != want {
+		t.Errorf("after a bigger font, WidthLimit = %d, want %d", got, want)
+	}
+	d.widthLimit.value, d.hasChosenWidth = 500, true
+	d.fontSize.step(-4)
+	d.followFontSize()
+	if got := d.Style().WidthLimit; got != 500 {
+		t.Errorf("a chosen width changed with the font: %d, want 500", got)
+	}
+}
+
+// memorySettings is a SettingsStore that keeps settings in memory, for tests.
+type memorySettings struct {
+	current settings.Settings
+}
+
+func (m *memorySettings) Get() settings.Settings { return m.current }
+
+func (m *memorySettings) Update(change func(*settings.Settings)) error {
+	change(&m.current)
+	return nil
+}
+
+func TestExtractPresetsSaveAndApply(t *testing.T) {
+	store := &memorySettings{}
+	d := newExtractDialog(func() {}, store)
+	d.backdrop.selected, d.fontSize.value = backdropDark, 18
+	d.widthLimit.value, d.hasChosenWidth = 500, true
+	store.current.SaveExtractPreset(d.currentPreset("Forum"))
+
+	other := newExtractDialog(func() {}, store)
+	other.applyPresetNamed("Forum")
+	got := other.Style()
+	if got.Backdrop != colorBackdropDark || got.FontSize != 18 || got.WidthLimit != 500 || other.presetName != "Forum" {
+		t.Errorf("applied preset gives %+v (preset %q)", got, other.presetName)
+	}
+}
+
+func TestExtractPresetKeepsFollowingTheFontSize(t *testing.T) {
+	store := &memorySettings{}
+	store.current.SaveExtractPreset(settings.ExtractPreset{Name: "Big", Backdrop: "light", FontSize: 22})
+	store.current.DefaultExtractPreset = "Big"
+	d := newExtractDialog(func() {}, store)
+	d.Open([]chatLine{{copyText: "John Doe says: hi", color: colorChatSay}})
+	if got, want := d.Style().WidthLimit, screenshot.DefaultWidthLimit(22); got != want || d.hasChosenWidth {
+		t.Errorf("default preset without a width: WidthLimit = %d (chosen %v), want %d following the font", got, d.hasChosenWidth, want)
+	}
+	if preset := d.currentPreset("again"); preset.WidthLimit != 0 {
+		t.Errorf("re-saved preset WidthLimit = %d, want 0 (follow the font)", preset.WidthLimit)
 	}
 }

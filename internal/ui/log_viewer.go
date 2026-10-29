@@ -19,6 +19,7 @@ type viewerOptions struct {
 	isLive      bool // capture is still writing to this session
 	library     LogLibrary
 	screenshots ScreenshotStore
+	settings    SettingsStore // where extract presets are kept
 	invalidate  func()
 }
 
@@ -45,7 +46,7 @@ func newLogViewer(options viewerOptions) *logViewer {
 		loader:  newBackgroundLoad[[]chatlog.Record](options.invalidate),
 		filters: newLogFilters(),
 		lines:   newChatLineList(),
-		extract: newExtractDialog(options.invalidate),
+		extract: newExtractDialog(options.invalidate, options.settings),
 		saver:   newBackgroundLoad[screenshot.Shot](options.invalidate),
 	}
 	v.loader.Start(func() ([]chatlog.Record, error) { return options.library.Records(options.session.Path) })
