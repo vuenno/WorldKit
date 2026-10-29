@@ -52,11 +52,12 @@ func (d *extractDialog) updatePresets(gtx layout.Context) bool {
 	return isChanged
 }
 
-// currentPreset is the dialog's look as a preset called name. A max width that still
-// follows the font size is saved as zero, so it keeps following it.
+// currentPreset is the dialog's look as a preset called name. The in-game width is saved
+// as zero, so the preset keeps meaning "as in game".
 func (d *extractDialog) currentPreset(name string) settings.ExtractPreset {
-	preset := settings.ExtractPreset{Name: name, Backdrop: backdropNames[d.backdrop.selected], FontSize: d.fontSize.value}
-	if d.hasChosenWidth {
+	look := d.look()
+	preset := settings.ExtractPreset{Name: name, Backdrop: backdropNames[d.backdrop.selected], ChatFont: look.Font.String(), ChatScale: look.ChatScale}
+	if d.widthLimit.value != screenshot.DefaultWidthLimit() {
 		preset.WidthLimit = d.widthLimit.value
 	}
 	return preset
@@ -69,31 +70,52 @@ func (d *extractDialog) applyPresetNamed(name string) {
 	}
 }
 
-// applyPreset sets the background, font size and max width from preset.
+// applyPreset sets the background, chat font and scale, and max width from preset.
 func (d *extractDialog) applyPreset(preset settings.ExtractPreset) {
+	look := presetLook(preset)
 	d.backdrop.selected = backdropIndex(preset.Backdrop)
-	d.fontSize.value = screenshot.ClampFontSize(preset.FontSize)
-	d.hasChosenWidth = preset.WidthLimit > 0
-	d.widthLimit.value = screenshot.ClampWidthLimit(preset.WidthLimit, d.fontSize.value)
+	d.chatFont.selected = chatFontIndex(look.Font)
+	d.chatScale.value = look.ChatScale
+	d.widthLimit.value = screenshot.ClampWidthLimit(preset.WidthLimit)
 	d.presetName = preset.Name
 }
 
-// extractPresetSuggestion names a preset after its look: "Dark · 16 px · 500 wide".
+// presetLook is a preset's chat font and scale. A preset saved before chat scales has a
+// font size instead; it gets the nearest scale.
+func presetLook(preset settings.ExtractPreset) screenshot.Look {
+	scale := screenshot.ClampChatScale(preset.ChatScale)
+	if preset.ChatScale == 0 && preset.FontSize > 0 {
+		scale = screenshot.ChatScaleForFontSize(preset.FontSize)
+	}
+	return screenshot.Look{Font: screenshot.ParseChatFont(preset.ChatFont), ChatScale: scale}
+}
+
+func chatFontIndex(chatFont screenshot.ChatFont) int {
+	for i, known := range screenshot.ChatFonts {
+		if known == chatFont {
+			return i
+		}
+	}
+	return 0
+}
+
+// extractPresetSuggestion names a preset after its look: "Dark · Arial 60% · 500 wide".
 func extractPresetSuggestion(preset settings.ExtractPreset) string {
-	name := fmt.Sprintf("%s · %d px", backdropLabels[backdropIndex(preset.Backdrop)], preset.FontSize)
+	name := fmt.Sprintf("%s · %s", backdropLabels[backdropIndex(preset.Backdrop)], presetLook(preset))
 	if preset.WidthLimit > 0 {
 		name += fmt.Sprintf(" · %d wide", preset.WidthLimit)
 	}
 	return name
 }
 
-// describeExtractPreset sums up a preset for Settings and the menu: "Dark · 16 px · max 500 px".
+// describeExtractPreset sums up a preset for Settings and the menu:
+// "Dark · Arial 60% · max 500 px".
 func describeExtractPreset(preset settings.ExtractPreset) string {
 	width := "in-game width"
 	if preset.WidthLimit > 0 {
 		width = fmt.Sprintf("max %d px", preset.WidthLimit)
 	}
-	return fmt.Sprintf("%s · %d px · %s", backdropLabels[backdropIndex(preset.Backdrop)], screenshot.ClampFontSize(preset.FontSize), width)
+	return fmt.Sprintf("%s · %s · %s", backdropLabels[backdropIndex(preset.Backdrop)], presetLook(preset), width)
 }
 
 // layoutPresetRow is the Preset dropdown, shown once any extract preset is saved.
@@ -104,7 +126,7 @@ func (d *extractDialog) layoutPresetRow(gtx layout.Context, theme *material.Them
 	}
 	items := make([]menuItem, len(presets))
 	for i, preset := range presets {
-		items[i] = menuItem{label: preset.Name, detail: fmt.Sprintf("%d px", screenshot.ClampFontSize(preset.FontSize))}
+		items[i] = menuItem{label: preset.Name, detail: presetLook(preset).String()}
 	}
 	label := d.presetName
 	if label == "" {
@@ -113,6 +135,6 @@ func (d *extractDialog) layoutPresetRow(gtx layout.Context, theme *material.Them
 	return layout.Inset{Top: spacingMedium}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layoutOptionRow(gtx, theme, "Preset", func(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 			return d.presetMenu.LayoutButton(gtx, theme, label, false, items)
-		}, "A saved background, font size and width.")
+		}, "A saved background, chat font, scale and width.")
 	})
 }

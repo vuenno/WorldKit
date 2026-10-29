@@ -13,7 +13,7 @@ func TestRenderFitsTheWidthLimit(t *testing.T) {
 		style Style
 	}{
 		{"wraps long lines", []Line{long}, Style{WidthLimit: 500}},
-		{"big font, narrow image", []Line{long}, Style{FontSize: MaxFontSize, WidthLimit: 300}},
+		{"big font, narrow image", []Line{long}, Style{Look: Look{ChatScale: MaxChatScale}, WidthLimit: 300}},
 		{"one word longer than the limit", []Line{sayLine(strings.Repeat("W", 80))}, Style{WidthLimit: MinWidthLimit}},
 	}
 	for _, test := range tests {
@@ -41,11 +41,11 @@ func TestRenderKeepsManualLineBreaks(t *testing.T) {
 func TestDefaultWidthLimitIsTheInGameWidth(t *testing.T) {
 	long := []Line{sayLine("John Doe says: " + strings.Repeat("lorem ipsum dolor ", 30))}
 	unset := render(t, long, Style{})
-	explicit := render(t, long, Style{WidthLimit: DefaultWidthLimit(DefaultFontSize)})
+	explicit := render(t, long, Style{WidthLimit: DefaultWidthLimit()})
 	if unset.Image.Bounds() != explicit.Image.Bounds() {
 		t.Errorf("no limit draws %v, the default limit %v; want the same", unset.Image.Bounds(), explicit.Image.Bounds())
 	}
-	if got := ClampWidthLimit(50, DefaultFontSize); got != MinWidthLimit {
+	if got := ClampWidthLimit(50); got != MinWidthLimit {
 		t.Errorf("ClampWidthLimit(50) = %d, want %d", got, MinWidthLimit)
 	}
 }

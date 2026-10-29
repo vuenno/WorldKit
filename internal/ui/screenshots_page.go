@@ -45,7 +45,7 @@ func loadShots(store ScreenshotStore) ([]loadedShot, error) {
 		}
 		loaded[i].image = paint.NewImageOp(saved.Image)
 		loaded[i].size = saved.Image.Bounds().Size()
-		loaded[i].rowBoxes = screenshot.RowBoxes(saved.Image, saved.FontSize)
+		loaded[i].rowBoxes = screenshot.RowBoxes(saved.Image, saved.Grid)
 	}
 	return loaded, nil
 }

@@ -18,6 +18,13 @@ var logoPNG []byte
 //go:embed fonts/*.ttf
 var Fonts embed.FS
 
+// MuktaRegular is Mukta Regular (OFL-1.1, see chatfonts/OFL.txt), one of the fonts GTA
+// World's chat can be set to. Screenshots draw with it; the UI never does. The game loads
+// only this weight from Google Fonts, so its bold is synthetic.
+//
+//go:embed chatfonts/Mukta-Regular.ttf
+var MuktaRegular []byte
+
 // Logo returns the decoded 384×384 WorldKit logo with a transparent background.
 var Logo = sync.OnceValue(func() image.Image {
 	logo, err := png.Decode(bytes.NewReader(logoPNG))

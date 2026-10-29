@@ -82,7 +82,7 @@ func (s *Store) freePath(saved time.Time) (string, error) {
 // writePNG encodes picture and writes it atomically, so a crash never leaves a
 // half-written screenshot under its final name.
 func writePNG(path string, picture *Picture) error {
-	data, err := encodePNG(picture.Image, picture.FontSize)
+	data, err := encodePNG(picture.Image, picture.Look)
 	if err != nil {
 		return fmt.Errorf("encode screenshot %q: %w", path, err)
 	}
@@ -135,10 +135,10 @@ func savedFromName(name string) (time.Time, bool) {
 	return saved, err == nil
 }
 
-// SavedImage is a decoded screenshot file and the font size it was drawn at.
+// SavedImage is a decoded screenshot file and where its rows of text are.
 type SavedImage struct {
-	Image    image.Image
-	FontSize int // pixels; DefaultFontSize for files that don't record one
+	Image image.Image
+	Grid  RowGrid
 }
 
 // Load decodes the screenshot at path.
@@ -151,7 +151,7 @@ func (s *Store) Load(path string) (SavedImage, error) {
 	if err != nil {
 		return SavedImage{}, fmt.Errorf("decode screenshot %q: %w", path, err)
 	}
-	return SavedImage{Image: img, FontSize: savedFontSize(data)}, nil
+	return SavedImage{Image: img, Grid: savedGrid(data)}, nil
 }
 
 // Delete removes the screenshot at path for good. It refuses files outside the store's

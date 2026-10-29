@@ -20,13 +20,15 @@ const maxUndoSteps = 200
 
 // pictureEditor shows a rendered screenshot and edits its text right on the image: click
 // to place the caret, drag or Shift+click to select, type to change the text, Ctrl+Z to
-// undo. The extract dialog's Italic and color tools act on its selection.
+// undo. Lines move by the grips beside them (or Alt+Up/Down). The extract dialog's Italic,
+// color and Merge lines tools act on its selection.
 type pictureEditor struct {
 	doc        *screenshot.Document
 	history    []*screenshot.Document // earlier versions, newest last
 	selection  screenshot.Selection
 	isEditable bool
 	isDragging bool
+	lineDrag   lineDrag
 	picture    *screenshot.Picture // the newest render; may trail doc by a keystroke
 	image      paint.ImageOp
 	imageRect  image.Rectangle // where the image was drawn last frame, in editor pixels
@@ -84,8 +86,9 @@ func (e *pictureEditor) Update(gtx layout.Context) bool {
 	if !e.isEditable {
 		return false
 	}
+	isMoved := e.handleLineDrag(gtx)
 	e.handlePointer(gtx)
-	return e.handleKeys(gtx)
+	return e.handleKeys(gtx) || isMoved
 }
 
 func (e *pictureEditor) handlePointer(gtx layout.Context) {
@@ -140,6 +143,8 @@ func (e *pictureEditor) handleKeys(gtx layout.Context) bool {
 			key.Filter{Focus: e, Name: key.NameRightArrow, Optional: key.ModShift},
 			key.Filter{Focus: e, Name: key.NameHome, Optional: key.ModShift},
 			key.Filter{Focus: e, Name: key.NameEnd, Optional: key.ModShift},
+			key.Filter{Focus: e, Name: key.NameUpArrow, Required: key.ModAlt},
+			key.Filter{Focus: e, Name: key.NameDownArrow, Required: key.ModAlt},
 			key.Filter{Focus: e, Name: key.NameDeleteBackward},
 			key.Filter{Focus: e, Name: key.NameDeleteForward},
 			key.Filter{Focus: e, Name: key.NameReturn},
@@ -175,6 +180,8 @@ func (e *pictureEditor) handleKey(ev key.Event) bool {
 		e.selection = e.doc.All()
 	case "Z":
 		return e.undo()
+	case key.NameUpArrow, key.NameDownArrow:
+		return e.moveCaretLine(ev.Name == key.NameDownArrow)
 	case key.NameReturn:
 		e.replaceSelection("\n")
 		return true
@@ -207,16 +214,32 @@ func (e *pictureEditor) deleteSelection(isForward bool) bool {
 	return true
 }
 
+// shownSize is the size the picture is drawn at in a box width pixels wide: scaled down to
+// fit between the side margins when wider, never up.
+func (e *pictureEditor) shownSize(gtx layout.Context, width int) image.Point {
+	return fittedSize(e.picture.Image.Bounds().Size(), width-2*e.sideMargin(gtx))
+}
+
+// sideMargin keeps room beside the picture; while editing it holds the line grips.
+func (e *pictureEditor) sideMargin(gtx layout.Context) int {
+	margin := spacingLarge
+	if e.isEditable {
+		margin += lineGripWidth
+	}
+	return gtx.Dp(margin)
+}
+
 // Layout fills the constraints: the picture centered (scaled down to fit when wider), the
-// selection behind its text and the caret while focused. While editable, the whole area
-// takes clicks, so clicking beside a short line puts the caret at its end.
+// selection over its text and the caret while focused. While editable, the whole area
+// takes clicks, so clicking beside a short line puts the caret at its end, except the
+// margin left of the picture, where the line grips are.
 func (e *pictureEditor) Layout(gtx layout.Context) layout.Dimensions {
 	box := gtx.Constraints.Max
 	if e.picture == nil {
 		return layout.Dimensions{Size: box}
 	}
 	size := e.picture.Image.Bounds().Size()
-	shown := fittedSize(size, box.X-2*gtx.Dp(spacingLarge))
+	shown := e.shownSize(gtx, box.X)
 	e.scale = float32(shown.X) / float32(size.X)
 	e.imageRect = image.Rectangle{Max: shown}.Add(image.Pt((box.X-shown.X)/2, (box.Y-shown.Y)/2))
 	if e.isEditable {
@@ -225,16 +248,23 @@ func (e *pictureEditor) Layout(gtx layout.Context) layout.Dimensions {
 		pointer.CursorText.Add(gtx.Ops)
 		area.Pop()
 	}
-	defer op.Offset(e.imageRect.Min).Push(gtx.Ops).Pop()
+	if e.canReorder() {
+		e.layoutGrips(gtx)
+	}
+	picture := op.Offset(e.imageRect.Min).Push(gtx.Ops)
+	layoutImageFitted(gtx, e.image, size, shown)
+	// Over the picture, not behind it: the text's soft shadow covers nearly all of each row
+	// and would hide a highlight underneath.
 	for _, bounds := range e.picture.SelectionBounds(e.selection) {
 		paint.FillShape(gtx.Ops, withOpacity(colorPrimary, selectionOpacity), clip.Rect(e.toScreen(bounds)).Op())
 	}
-	layoutImageFitted(gtx, e.image, size, shown)
 	if caret, ok := e.picture.CaretBounds(e.selection.Caret); ok && e.isEditable && gtx.Focused(e) {
 		caret = e.toScreen(caret)
 		caret.Max.X = caret.Min.X + max(1, gtx.Dp(caretWidth))
 		paint.FillShape(gtx.Ops, colorTextPrimary, clip.Rect(caret).Op())
 	}
+	picture.Pop()
+	e.layoutLineDrag(gtx)
 	return layout.Dimensions{Size: box}
 }
 

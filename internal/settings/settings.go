@@ -28,8 +28,8 @@ type Settings struct {
 	ExportPresets []ExportPreset `json:"exportPresets,omitempty"`
 	// DefaultPreset names the preset the export dialog starts with; empty: PNG, lossless.
 	DefaultPreset string `json:"defaultExportPreset,omitempty"`
-	// ExtractPresets are the user's saved looks for Extract image (background, font size,
-	// max width), in the order they were saved.
+	// ExtractPresets are the user's saved looks for Extract image (background, chat font
+	// and scale, max width), in the order they were saved.
 	ExtractPresets []ExtractPreset `json:"extractPresets,omitempty"`
 	// DefaultExtractPreset names the preset Extract image starts with; empty: the defaults.
 	DefaultExtractPreset string `json:"defaultExtractPreset,omitempty"`
@@ -47,11 +47,14 @@ type ExportPreset struct {
 
 // ExtractPreset is a saved look for chat screenshots made with Extract image.
 type ExtractPreset struct {
-	Name     string `json:"name"`
-	Backdrop string `json:"backdrop"` // "transparent", "dark" or "light"
-	FontSize int    `json:"fontSize"` // pixels
-	// WidthLimit is the image's max width in pixels; zero follows the font size (the
-	// in-game width).
+	Name      string `json:"name"`
+	Backdrop  string `json:"backdrop"`            // "transparent", "dark" or "light"
+	ChatFont  string `json:"chatFont,omitempty"`  // "Arial" or "Mukta"; empty: Arial
+	ChatScale int    `json:"chatScale,omitempty"` // percent; zero: from FontSize, or the default
+	// FontSize is what presets saved before chat scales recorded instead: the font size in
+	// pixels. It is only read, to pick the nearest chat scale.
+	FontSize int `json:"fontSize,omitempty"`
+	// WidthLimit is the image's max width in pixels; zero: the in-game chat's width.
 	WidthLimit int `json:"widthLimit,omitempty"`
 }
 

@@ -54,7 +54,8 @@ Two embedded typefaces (`assets/fonts`, OFL-1.1), loaded by `newShaper` in
 - **Geist** (`fontUI`): every label, title, button and chat line. Weights 400/500/600/700.
 - **Geist Mono** (`fontMono`): times, counts, sizes and paths — anything people compare
   digit by digit. Weights 400/500.
-- **Arial Bold** (and Bold Italic) only in extracted screenshot images (see Chat screenshots).
+- **Arial Bold** (and Bold Italic) or **Mukta** only in extracted screenshot images, as the
+  player's in-game chat font (see Chat screenshots).
 
 | Role          | Token                 | Size | Weight   | Color                 |
 |---------------|-----------------------|------|----------|-----------------------|
@@ -98,7 +99,8 @@ Text helpers in `internal/ui/text.go`: `pageTitle`, `screenTitle`, `sectionTitle
 | `colorScrim`           | ground @ 80% | Dims the window behind a dialog                   |
 
 Tints: selected chat lines are `colorPrimary` at `lineSelectionOpacity` (0.07) plus a 3 dp
-orange bar; status pills fill with their color at `liveTintOpacity` (0.06). Gio blends in
+orange bar; status pills fill with their color at `liveTintOpacity` (0.06); a chat line
+being dragged on a screenshot preview at `lineDragOpacity` (0.15). Gio blends in
 linear light, so these alphas look like the design's ~12% browser tints.
 
 ### Chat colors
@@ -158,6 +160,8 @@ Spacing follows a 4 dp grid: `spacingTiny` 4, `spacingSmall` 8, `spacingMedium` 
 | `extractDialogWidth`    | 720 dp | Max width of the Extract image dialog |
 | `swatchSize`            | 22 dp  | Color swatches (`swatchRingWidth` 2 dp hover ring) |
 | `caretWidth`            | 1 dp   | The caret in the picture editor       |
+| `lineGripWidth`         | 20 dp  | Grip margin left of an edited preview |
+| `dropIndicatorHeight`   | 2 dp   | Where a dragged line will land        |
 | `optionLabelWidth`      | 88 dp  | Label column of the Extract dialog's options |
 | `stepperValueWidth`     | 52 dp  | The value between a number stepper's − and + |
 | `inspectorWidth`        | 216 dp | The editor's right panel (inspector, layers): compact, like a design tool's |
@@ -230,8 +234,14 @@ Line icons on a 24-unit grid with 1.8-unit rounded strokes (`strokeIcon`,
 - **Disabled controls** (`layoutEnabled`): drawn at `disabledOpacity` (0.4), no input.
 - **Confirm prompt** (`confirmPrompt`): a `dialog` with a danger confirm button and Cancel.
 - **Picture editor** (`pictureEditor`): text edited on a rendered image. Text cursor over
-  the whole preview; selection `colorPrimary` at `selectionOpacity` behind the glyphs;
+  the whole preview; selection `colorPrimary` at `selectionOpacity` over the picture (the text's soft shadow fills most of each row, so a highlight behind it would hide);
   caret `caretWidth` (1 dp) `colorTextPrimary`, shown while focused, not blinking.
+  While editing two or more lines, a `lineGripWidth` (20 dp) margin left of the picture
+  holds a grip (six-dot `iconGrip`, 14 dp, `colorTextTertiary`; `colorTextPrimary` on the
+  hovered or dragged line) centered on each line, 4 dp from the image, with a grab cursor.
+  Dragging tints the line `colorPrimary` at `lineDragOpacity` (0.15) and marks where it
+  will land with a `dropIndicatorHeight` (2 dp) `colorPrimary` bar from the grip margin to
+  the image's right edge (none where dropping changes nothing).
 
 ## Sidebar
 
@@ -309,8 +319,10 @@ up to `extractDialogWidth` (720 dp) over the log viewer.
   save something.").
 - While editing, first: a row of secondary **Italic** (italic icon, 32 dp), a vertical
   divider, the color swatches 4 dp apart and ghost **Default** (back to the automatic
-  colors), then a caption (Ctrl+A, nothing selected = all text, Ctrl+Z), 12 dp above the
-  preview.
+  colors), a vertical divider and secondary **Merge lines** (merge icon, 32 dp; disabled
+  unless the selection covers two or more lines one person said), then two captions 4 dp
+  apart (Ctrl+A, nothing selected = all text, Ctrl+Z; dragging a line by its grip or
+  Alt+Up/Down, and Merge lines), 12 dp above the preview.
 - **Preview**: rounded `radiusCard` checkerboard, at least `screenshotPreviewHeight`
   (140 dp) tall, 16 dp padding, the rendered PNG centered at 1:1 (scaled down to fit when
   wider); redrawn in the background on every change. "Drawing…" before the first preview.
@@ -319,47 +331,66 @@ up to `extractDialogWidth` (720 dp) over the log viewer.
   Home/End (Shift extends) and Ctrl+Z work as in a text field.
 - 12 dp below: "Background" + segmented **Transparent · Dark · Light** + caption "Dark and
   Light put a box behind each line." (one line).
-- 8 dp below: "Font size" + number stepper **− 14 px +** (10–24 px) + caption "A bigger
-  font makes a bigger image." Option labels sit in an `optionLabelWidth` column so the
-  controls line up.
-- 8 dp below: "Max width" + number stepper **− 914 px +** (200–1800 px, steps of 50 landing
-  on round values) + caption "Longer lines wrap to fit. Use Edit to break lines yourself."
-  (while editing: "… Press Enter for a break of your own."). It follows the font size (the
-  in-game width) until the user picks a width. All three choices stay for the next extract.
+- 8 dp below: "Font" + segmented **Arial · Mukta** + caption "The font your chat is set
+  to in game." Option labels sit in an `optionLabelWidth` column so the controls line up.
+- 8 dp below: "Chat scale" + number stepper **− 100 % +** (50–150 %, steps of 5) + caption
+  "Your in-game Chat scale. Bigger text makes a bigger image."
+- 8 dp below: "Max width" + number stepper **− 772 px +** (200–1800 px, steps of 50 landing
+  on round values; default the in-game chat width at any scale) + caption "Longer lines
+  wrap to fit. Use Edit to break lines yourself." (while editing: "… Press Enter for a
+  break of your own."). All choices stay for the next extract.
 - **Presets** (once any is saved): a "Preset" row above Background with a dropdown of the
-  saved looks (name, font size; "Custom" once a choice changes) and caption "A saved
-  background, font size and width." The first Extract in a log starts with the default
-  preset from Settings. 12 dp below Max width: **Save as preset…** (`presetNaming`, as in
-  the export dialog) saves background, font size and max width; a width still following
-  the font size is saved as "in-game width".
+  saved looks (name, "Arial 60%"; "Custom" once a choice changes) and caption "A saved
+  background, chat font, scale and width." The first Extract in a log starts with the
+  default preset from Settings. 12 dp below Max width: **Save as preset…**
+  (`presetNaming`, as in the export dialog) saves background, chat font and scale, and
+  max width; the in-game width is saved as "in-game width". Suggested names and Settings
+  rows read "Dark · Arial 60% · max 500 px".
 - The body scrolls; the buttons stay in view 24 dp below it: primary **Save image** (image
   icon), secondary **Edit** (pencil icon; hidden once editing), secondary **Cancel**.
 - Italic, colors and Default act on the selection, or on all the text with nothing
   selected. Italic makes the selection italic, or upright when all of it already is.
+- Merge lines joins the selected lines into the first: later lines lose their timestamp
+  and "Name says: " and follow after a space ("X says: A." + "X says: B." → "X says: A.
+  B."). Moving and merging are undone with Ctrl+Z like any edit.
 
 ## Chat screenshots (extracted images)
 
-What Extract image writes: a PNG players lay over game screenshots, styled like the in-game chat.
+What Extract image writes: a PNG players lay over game screenshots, drawn as GTA World's
+in-game chat draws (its stylesheet, as FiveM's Chromium renders it, at 1920×1080). Pixel
+values (not dp/sp) because they describe the file, not the UI; they live in
+`internal/screenshot/chat.go`, `render.go` and `shadow.go`.
 
-- Font: **Arial Bold**, read from `%WINDIR%\Fonts\arialbd.ttf`; italic text uses
-  **Arial Bold Italic** (`arialbi.ttf`). Bundled Go Bold / Go Bold Italic if those fail.
-- Size: picked per extract, **10–24 px**, default **14 px** (the in-game chat). At 14 px:
-  18 px line height and a 900 px wrap; both scale with the font (line height rounded), so
-  lines wrap at the same words and the image grows with the text. **Max width** (200–1800 px,
-  default that in-game width plus the 7 px margins) caps the image: lines wrap at spaces to
-  fit, and a word longer than the limit breaks between characters, so the image is never
-  wider. Lines broken by hand (Enter while editing) always start a new row. Fixed at every size:
-  6 px padding, each line in its chat color with a 1 px black outline (drawn at the 8
-  neighboring offsets) so it reads over any picture. Wrapped lines keep their colors. The
-  image is just big enough for the text. Pixel values (not dp/sp) because they describe
-  the file, not the UI; they live in `internal/screenshot/render.go`. The PNG records its
-  font size (tEXt chunk `WorldKit:FontSize`).
+- Font: the player's chat font. **Arial**: Arial Bold from `%WINDIR%\Fonts\arialbd.ttf`
+  (italic: Arial Bold Italic, `arialbi.ttf`), drawn with DirectWrite; bundled Go Bold / Go
+  Bold Italic if those fail. **Mukta**: the bundled Mukta Regular with Chromium's fake bold
+  (fake italic: a 0.25 slant); characters it lacks come from Arial.
+- Size: **chat scale** × 16.74 px (`1.55vh`), drawn at that size truncated to hundredths
+  (Arial 60 % → 10.04 px, Mukta 75 % → 12.55 px); 0.4 px letter spacing. Rows are that size
+  plus 3.348 px tall (rounded to 1/64 px), so they start between pixels as in game; the
+  baseline sits at the row top + the font's ascent + half the leading, in whole pixels.
+- Each line in its chat color, every character's edges through Chromium's text gamma for
+  that color (light text on dark reads as heavy as dark on light).
+- Shadow: the chat's `text-shadow: 0 0 0.18vh #000` three times — each run of text's glyphs
+  in black, softly blurred (a 5-tap kernel: 0.044, 0.210, 0.492, 0.210, 0.044, both ways),
+  stacked three times, drawn under that run. It reaches 2 px past the glyphs.
+- **Max width** (200–1800 px, default **772 px**: the in-game chat's 758 px of text plus
+  the 7 px margins) caps the image: lines wrap at spaces and after a hyphen between
+  letters, and a word longer than the limit breaks between characters, so the image is
+  never wider. The chat box doesn't grow with the scale, so bigger text wraps into more
+  rows, as in game. Lines broken by hand (Enter while editing) always start a new row.
+  Wrapped lines keep their colors.
+- 7 px margin (5 px padding + the shadow's reach); the text starts 0.36 px in and the first
+  row 0.30 px down, the fractions of the in-game chat's position, so glyph edges smooth
+  the same way. The image is just big enough for the text. The PNG records its look
+  (tEXt chunk `WorldKit:Chat`, e.g. "Arial 60").
 - **Markup** in a chat line: `/text/` → italic, slashes removed; `*text*` → the /me color
   (`colorChatEmote`), asterisks removed. Markers count only at word edges (`and/or`,
   `2 * 3` and a /me line's leading `* ` stay as typed).
 - **Backdrop**: Transparent draws nothing behind the text. Dark/Light draw one box per
-  drawn row: the row's height (18 px at 14 px), from 5 px left of its text to 5 px right
-  of it, rows flush (a stepped shape for uneven lines), everything else transparent.
+  drawn row: the row's height (13–14 px at Arial 60 %, rows alternate as their tops fall
+  between pixels), from 5 px left of its text to 5 px right of it, rows flush (a stepped
+  shape for uneven lines), everything else transparent.
 
 ## Log Screenshots page
 
