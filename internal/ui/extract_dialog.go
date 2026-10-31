@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"gioui.org/f32"
+	"gioui.org/io/key"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -44,6 +45,9 @@ type extractDialog struct {
 	naming     *presetNaming
 	hasOpened  bool
 	save       widget.Clickable
+	copyImage  widget.Clickable
+	copier     *imageCopy
+	toast      toast // "Image copied", drawn above the dialog's scrim
 	edit       widget.Clickable
 	cancel     widget.Clickable
 	italic     widget.Clickable
@@ -74,6 +78,7 @@ func newExtractDialog(invalidate func(), settings SettingsStore) *extractDialog 
 		swatches: make([]widget.Clickable, len(textSwatches)),
 		body:     widget.List{List: layout.List{Axis: layout.Vertical}},
 		renderer: newBackgroundLoad[*screenshot.Picture](invalidate),
+		copier:   newImageCopy(invalidate),
 	}
 }
 
@@ -141,8 +146,9 @@ func (d *extractDialog) receivePreview() {
 }
 
 // Update handles the dialog's input and reports whether Save image was clicked, which
-// closes it, as Cancel does.
+// closes it, as Cancel does. Copy image copies and keeps it open.
 func (d *extractDialog) Update(gtx layout.Context) extractOutcome {
+	d.copier.ShowResult(gtx, &d.toast)
 	if !d.isOpen {
 		return extractPending
 	}
@@ -169,11 +175,48 @@ func (d *extractDialog) Update(gtx layout.Context) extractOutcome {
 	if d.cancel.Clicked(gtx) {
 		d.isOpen = false
 	}
+	isCopyRequested := d.copyShortcutPressed(gtx) // read every frame, so the lines never get it
+	if (d.copyImage.Clicked(gtx) || isCopyRequested) && d.canCopy() {
+		d.startCopy()
+	}
 	if d.save.Clicked(gtx) && len(d.Lines()) > 0 {
 		d.isOpen = false
 		return extractSaveRequested
 	}
 	return extractPending
+}
+
+// copyShortcutPressed reports whether Ctrl+C was pressed, whatever has focus: in the
+// dialog it copies the image, never the log lines behind it.
+func (d *extractDialog) copyShortcutPressed(gtx layout.Context) bool {
+	isPressed := false
+	for {
+		ev, ok := gtx.Event(key.Filter{Name: "C", Required: key.ModShortcut})
+		if !ok {
+			return isPressed
+		}
+		if ev, ok := ev.(key.Event); ok && ev.State == key.Press {
+			isPressed = true
+		}
+	}
+}
+
+// canCopy reports whether Copy image can run: there is text, and no copy is running.
+func (d *extractDialog) canCopy() bool {
+	return len(d.Lines()) > 0 && !d.copier.IsCopying()
+}
+
+// startCopy copies the image exactly as Save image would write it: the lines with text,
+// in the chosen look, background included.
+func (d *extractDialog) startCopy() {
+	lines, style := d.Lines(), d.Style()
+	d.copier.Start(func() (image.Image, error) {
+		picture, err := screenshot.Render(lines, style)
+		if err != nil {
+			return nil, err
+		}
+		return picture.Image, nil
+	})
 }
 
 // widthLimitStep is how far one click moves Max width, in image pixels.
@@ -222,11 +265,12 @@ func (d *extractDialog) message() string {
 }
 
 // Layout draws the dialog while it is open: the scrolling preview, backdrop and editing
-// tools, with the buttons always in view below them.
+// tools, with the buttons always in view below them, and the copy toast on top.
 func (d *extractDialog) Layout(gtx layout.Context, theme *material.Theme) {
 	if !d.isOpen {
 		return
 	}
+	defer layoutCornerToast(gtx, theme, &d.toast)
 	d.dialog.Layout(gtx, theme, "Extract image", d.message(), func(gtx layout.Context) layout.Dimensions {
 		buttonsHeight := gtx.Dp(spacingXLarge + controlHeight)
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -416,6 +460,11 @@ func layoutSwatch(gtx layout.Context, click *widget.Clickable, c color.NRGBA) la
 func (d *extractDialog) layoutButtons(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 		layout.Rigid(primaryButton(&d.save, "Save image").withIcon(iconImage).Widget(theme)),
+		layout.Rigid(layout.Spacer{Width: spacingSmall}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			copyButton := secondaryButton(&d.copyImage, "Copy image").withIcon(iconCopy)
+			return layoutEnabled(gtx, d.canCopy(), copyButton.Widget(theme))
+		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			if d.isEditing {
 				return layout.Dimensions{}

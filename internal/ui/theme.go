@@ -41,6 +41,7 @@ var (
 var (
 	colorChatSay     = rgb(0xF1F1F1) // says, shouts, server messages
 	colorChatLow     = rgb(0xC6C4C4) // says [low]
+	colorChatLower   = rgb(0x939799) // says [lower]: quieter, so darker
 	colorChatWhisper = rgb(0xEDA841)
 	colorChatEmote   = rgb(0xC2A3DA) // /me and /do
 	colorChatOOC     = rgb(0xB8BEC7) // /b
@@ -60,7 +61,7 @@ var (
 
 // textSwatches are the extract dialog's color picker, in order: chat colors first.
 var textSwatches = []color.NRGBA{
-	colorChatSay, colorChatLow, colorChatEmote, colorChatWhisper, colorChatPM,
+	colorChatSay, colorChatLow, colorChatLower, colorChatEmote, colorChatWhisper, colorChatPM,
 	colorChatRed, colorChatGreen, colorChatBlue, colorChatCyan, colorChatPink,
 }
 

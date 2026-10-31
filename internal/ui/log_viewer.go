@@ -1,11 +1,9 @@
 package ui
 
 import (
-	"image"
 	"log/slog"
 
 	"gioui.org/layout"
-	"gioui.org/op"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
@@ -122,6 +120,11 @@ func (v *logViewer) receiveSavedShot(gtx layout.Context) {
 }
 
 func (v *logViewer) handleInput(gtx layout.Context) {
+	// The dialog goes first: while it is open, its Ctrl+C (copy the image) must win over
+	// the lines' Ctrl+C, which still have focus behind it.
+	if v.extract.Update(gtx) == extractSaveRequested {
+		v.saveShot(v.extract.Lines(), v.extract.Style())
+	}
 	if v.filters.Update(gtx) {
 		v.applyFilter()
 	}
@@ -133,9 +136,6 @@ func (v *logViewer) handleInput(gtx layout.Context) {
 	}
 	if v.lines.ExtractClicked(gtx) {
 		v.extract.Open(v.lines.SelectedLines())
-	}
-	if v.extract.Update(gtx) == extractSaveRequested {
-		v.saveShot(v.extract.Lines(), v.extract.Style())
 	}
 }
 
@@ -233,7 +233,7 @@ func (v *logViewer) layoutPanel(gtx layout.Context, theme *material.Theme) layou
 			})
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			return v.layoutToast(gtx, theme)
+			return layoutCornerToast(gtx, theme, &v.toast)
 		}),
 	)
 }
@@ -243,16 +243,4 @@ func (v *logViewer) layoutLines(gtx layout.Context, theme *material.Theme) layou
 		return layout.Center.Layout(gtx, secondaryText(theme, "No lines match these filters.").Layout)
 	}
 	return v.lines.Layout(gtx, theme)
-}
-
-// layoutToast pins the toast to the panel's bottom-right corner.
-func (v *logViewer) layoutToast(gtx layout.Context, theme *material.Theme) layout.Dimensions {
-	recording := op.Record(gtx.Ops)
-	dims := v.toast.Layout(gtx, theme)
-	toast := recording.Stop()
-	margin := gtx.Dp(spacingLarge)
-	origin := image.Pt(gtx.Constraints.Max.X-dims.Size.X-margin, gtx.Constraints.Max.Y-dims.Size.Y-margin)
-	defer op.Offset(origin).Push(gtx.Ops).Pop()
-	toast.Add(gtx.Ops)
-	return layout.Dimensions{Size: gtx.Constraints.Max}
 }

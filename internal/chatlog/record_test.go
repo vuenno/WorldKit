@@ -21,6 +21,7 @@ func TestParseClassifiesLines(t *testing.T) {
 		{"(( John Doe: brb ))", KindOOC, "John Doe", "brb"},
 		{"John Doe says: hi there", KindSay, "John Doe", "hi there"},
 		{"John Doe says [low]: quiet", KindSay, "John Doe", "quiet"},
+		{"John Doe says [lower]: quieter", KindSay, "John Doe", "quieter"},
 		{"John Doe shouts: hey!", KindShout, "John Doe", "hey!"},
 		{"John Doe whispers: psst", KindWhisper, "John Doe", "psst"},
 		{"* John Doe waves.", KindMe, "John Doe", "waves."},
