@@ -16,7 +16,7 @@ type Kind int
 const (
 	KindUnknown Kind = iota
 	KindHeader       // "[DATE: 18/OCT/2026 | TIME: 09:57:01]"
-	KindSay          // "John Doe says: hi" (also "says [low]:")
+	KindSay          // "John Doe says: hi" (also "says [low]:" and "says [lower]:")
 	KindShout        // "John Doe shouts: hey!"
 	KindWhisper      // "John Doe whispers: psst"
 	KindMe           // "* John Doe waves."
@@ -51,7 +51,7 @@ var lineRules = []lineRule{
 	{KindDo, regexp.MustCompile(`^\* (?P<text>.+) \(\( (?P<speaker>[^()]+) \)\)$`)},
 	{KindMe, regexp.MustCompile(`^\* (?P<speaker>\S+ \S+) (?P<text>.+)$`)},
 	{KindInfo, regexp.MustCompile(`^\[INFO\] (?P<text>.*)$`)},
-	{KindSay, regexp.MustCompile(`^(?P<speaker>[^\[*(][^:]*?) says(?: \[low\])?: (?P<text>.*)$`)},
+	{KindSay, regexp.MustCompile(`^(?P<speaker>[^\[*(][^:]*?) says(?: \[low\]| \[lower\])?: (?P<text>.*)$`)},
 	{KindShout, regexp.MustCompile(`^(?P<speaker>[^\[*(][^:]*?) shouts: (?P<text>.*)$`)},
 	{KindWhisper, regexp.MustCompile(`^(?P<speaker>[^\[*(][^:]*?) whispers(?: to [^:]+)?: (?P<text>.*)$`)},
 }

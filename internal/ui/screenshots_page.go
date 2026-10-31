@@ -22,7 +22,9 @@ import (
 type loadedShot struct {
 	shot  screenshot.Shot
 	image paint.ImageOp
-	size  image.Point
+	// pixels are the decoded image, for copying; image draws them without a copy.
+	pixels image.Image
+	size   image.Point
 	// rowBoxes are where a backdrop box goes behind each row of text (screenshot.RowBoxes).
 	rowBoxes []image.Rectangle
 	err      error // why the image couldn't be read; the shot is still listed so it can be deleted
@@ -44,6 +46,7 @@ func loadShots(store ScreenshotStore) ([]loadedShot, error) {
 			continue
 		}
 		loaded[i].image = paint.NewImageOp(saved.Image)
+		loaded[i].pixels = saved.Image
 		loaded[i].size = saved.Image.Bounds().Size()
 		loaded[i].rowBoxes = screenshot.RowBoxes(saved.Image, saved.Grid)
 	}
@@ -145,7 +148,7 @@ func (p *ScreenshotsPage) receiveShots() {
 			p.cards[shot.shot.Path] = &shotCardState{}
 		}
 		if shot.shot.Path == p.pendingOpen {
-			p.view = newScreenshotView(shot)
+			p.view = newScreenshotView(shot, p.invalidate)
 		}
 	}
 	p.pendingOpen = ""
@@ -158,7 +161,7 @@ func (p *ScreenshotsPage) handleCardClicks(gtx layout.Context, store ScreenshotS
 	for _, shot := range p.shots {
 		state := p.cards[shot.shot.Path]
 		if state.open.Clicked(gtx) {
-			p.view = newScreenshotView(shot)
+			p.view = newScreenshotView(shot, p.invalidate)
 		}
 		if state.folder.Clicked(gtx) {
 			revealFile(shot.shot.Path)

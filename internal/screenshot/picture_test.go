@@ -3,6 +3,7 @@ package screenshot
 import (
 	"image"
 	"image/color"
+	"math"
 	"strings"
 	"testing"
 )
@@ -44,11 +45,14 @@ func TestRenderBackdrop(t *testing.T) {
 			if pixel := img.RGBAAt(img.Bounds().Dx()-marginPx, rowMiddle(picture, 1)); pixel.A != 0 {
 				t.Errorf("beside the short row = %v, want transparent", pixel)
 			}
-			// Left of the text, inside the first row's padding, is the backdrop.
+			// The box starts where the text does: nothing to its left, backdrop from there.
 			top, _ := picture.grid.rowSpan(0)
-			inPadding := img.RGBAAt(marginPx-backdropPaddingPx+1, top+1)
-			if want := test.backdrop.A; inPadding.A != want {
-				t.Errorf("row padding alpha = %d, want %d", inPadding.A, want)
+			textLeft := int(math.Floor(textOriginX))
+			if beside := img.RGBAAt(textLeft-1, top+1); beside.A != 0 {
+				t.Errorf("left of the text = %v, want transparent", beside)
+			}
+			if atText := img.RGBAAt(textLeft, top+1); atText.A != test.backdrop.A {
+				t.Errorf("at the text's left edge alpha = %d, want %d", atText.A, test.backdrop.A)
 			}
 		})
 	}
@@ -80,6 +84,33 @@ func TestRowBoxesMatchRender(t *testing.T) {
 	}
 	if boxes[1].Dx() >= boxes[0].Dx() {
 		t.Errorf("short row box %v not narrower than %v", boxes[1], boxes[0])
+	}
+}
+
+func TestOnBackdrop(t *testing.T) {
+	picture := render(t, []Line{sayLine("A long first line of text"), sayLine("short")}, Style{})
+	boxes := RowBoxes(picture.Image, picture.grid)
+	tests := []struct {
+		name     string
+		backdrop color.NRGBA
+		wantBox  uint8 // alpha just inside the first box's top left corner
+	}{
+		{"dark", black, 0xFF},
+		{"transparent", color.NRGBA{}, 0},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			backed := OnBackdrop(picture.Image, boxes, test.backdrop)
+			if got := backed.RGBAAt(boxes[0].Min.X, boxes[0].Min.Y).A; got != test.wantBox {
+				t.Errorf("box corner alpha = %d, want %d", got, test.wantBox)
+			}
+			if corner := backed.RGBAAt(0, 0); corner.A != 0 {
+				t.Errorf("image corner = %v, want transparent", corner)
+			}
+			if backed.Bounds() != picture.Image.Bounds() {
+				t.Errorf("bounds = %v, want %v", backed.Bounds(), picture.Image.Bounds())
+			}
+		})
 	}
 }
 

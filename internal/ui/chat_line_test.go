@@ -16,6 +16,7 @@ func TestChatLineColor(t *testing.T) {
 		{"[DATE: 18/OCT/2026 | TIME: 09:57:01]", colorChatHeader},
 		{"[09:57:02] John Doe says: hi", colorChatSay},
 		{"[09:57:03] John Doe says [low]: quiet", colorChatLow},
+		{"[09:57:03] John Doe says [lower]: quieter", colorChatLower},
 		{"[09:57:04] John Doe shouts: hey!", colorChatSay},
 		{"[09:57:05] John Doe whispers: psst", colorChatWhisper},
 		{"[09:57:06] * John Doe waves.", colorChatEmote},

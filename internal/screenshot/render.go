@@ -52,10 +52,7 @@ func ClampWidthLimit(limit int) int {
 // shadow on a transparent background, so it stays readable over any screenshot.
 const (
 	paddingPx = 5
-	// backdropPaddingPx is how far a backdrop box reaches past its row's text on the left
-	// and right, as in the Chatlog Magician (padding 0 5px).
-	backdropPaddingPx = 5
-	marginPx          = paddingPx + shadowReachPx // from the image edge to the text
+	marginPx  = paddingPx + shadowReachPx // from the image edge to the text
 )
 
 // ErrNoLines is returned when there is nothing to draw.
@@ -187,9 +184,9 @@ func drawGlyphs(canvas *image.RGBA, glyphs []placedGlyph, c color.NRGBA) {
 	}
 }
 
-// drawBackdrop fills one box per row with text, each as wide as that row's text plus
-// padding. Rows sit flush, so a block of lines reads as one stepped shape, like the
-// Chatlog Magician's per-line background.
+// drawBackdrop fills one box per row with text, each exactly as wide as that row's text:
+// no box reaches past the row's first or last letter. Rows sit flush, so a block of lines
+// reads as one stepped shape, like the Chatlog Magician's per-line background.
 func drawBackdrop(canvas *image.RGBA, rows []textRow, grid RowGrid, backdrop color.NRGBA) {
 	fill := image.NewUniform(backdrop)
 	for index, row := range rows {
@@ -197,8 +194,8 @@ func drawBackdrop(canvas *image.RGBA, rows []textRow, grid RowGrid, backdrop col
 			continue
 		}
 		top, bottom := grid.rowSpan(index)
-		left := int(math.Floor(textOriginX)) - backdropPaddingPx
-		right := int(math.Ceil(textOriginX+row.width)) + backdropPaddingPx
+		left := int(math.Floor(textOriginX))
+		right := int(math.Ceil(textOriginX + row.width))
 		draw.Draw(canvas, image.Rect(left, top, right, bottom), fill, image.Point{}, draw.Src)
 	}
 }
@@ -220,7 +217,7 @@ func RowBoxes(img image.Image, grid RowGrid) []image.Rectangle {
 			continue
 		}
 		// The ink includes the shadow, which reaches past the text.
-		box := image.Rect(left+grid.Reach-backdropPaddingPx, top, right-grid.Reach+backdropPaddingPx, bottom)
+		box := image.Rect(left+grid.Reach, top, right-grid.Reach, bottom)
 		boxes = append(boxes, box.Intersect(bounds))
 	}
 }
@@ -239,4 +236,20 @@ func inkRange(img image.Image, top, bottom int) (left, right int, hasInk bool) {
 		}
 	}
 	return left, right, left < right
+}
+
+// OnBackdrop returns a copy of img with a backdrop box behind each of boxes, as Render
+// would have drawn them: what a viewer shows, baked into pixels (to copy or share). A zero
+// backdrop returns a plain copy.
+func OnBackdrop(img image.Image, boxes []image.Rectangle, backdrop color.NRGBA) *image.RGBA {
+	bounds := img.Bounds()
+	backed := image.NewRGBA(bounds)
+	if backdrop.A > 0 {
+		fill := image.NewUniform(backdrop)
+		for _, box := range boxes {
+			draw.Draw(backed, box.Intersect(bounds), fill, image.Point{}, draw.Src)
+		}
+	}
+	draw.Draw(backed, bounds, img, bounds.Min, draw.Over)
+	return backed
 }

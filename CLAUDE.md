@@ -39,8 +39,9 @@ code, whenever the change is worth noting:
   font parsing (`font/sfnt`) and outline rasterizing (`vector`).
 - `github.com/syndtr/goleveldb` (pulls in `github.com/golang/snappy`) to read FiveM's LevelDB
   key-value store, where GTA World keeps its chat log. Pure Go, read-only use, on a copy only.
-- `golang.org/x/sys/windows` (already required by Gio) for the registry (start with Windows) and
-  exclusive file handles (single-instance archive lock).
+- `golang.org/x/sys/windows` (already required by Gio) for the registry (start with Windows),
+  exclusive file handles (single-instance archive lock) and the image clipboard. Images are
+  copied as both `PNG` (keeps transparency) and `CF_DIBV5`; Gio's clipboard is text-only.
 - **Platform:** Windows only (amd64). Don't add code paths, build tags or resources for other OSes/arches.
 - **Never open FiveM's live data.** Copy `%AppData%\CitizenFX\kvs` to a temp folder and read the copy.
 - **User data** lives in `os.UserConfigDir()\WorldKit` (`%AppData%\WorldKit`): `settings.json`,
@@ -134,7 +135,8 @@ assets/              embedded files (//go:embed). logo.png (384×384, transparen
   `titleBar`; drag areas use `moveArea` (`system.ActionInputOp(system.ActionMove)`). Never put a
   clickable inside a move area: Windows takes those clicks.
 - Icons are `strokeIcon` path strings in `internal/ui/icons.go`; add new ones there.
-- Windows APIs without a Go wrapper (e.g. the file dialogs, `internal/filedialog`; DirectWrite, `internal/directwrite`) are called
+- Windows APIs without a Go wrapper (e.g. the file dialogs, `internal/filedialog`; DirectWrite, `internal/directwrite`;
+  the image clipboard, `internal/clipboard`) are called
   through COM/syscalls with `golang.org/x/sys/windows` in their own `internal/<name>` package,
   never CGO.
 - Images shown by Gio: make the `paint.ImageOp` once (from an `*image.RGBA`, which Gio

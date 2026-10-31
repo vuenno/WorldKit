@@ -98,8 +98,11 @@ func joinChatLines(lines []chatLine) string {
 func chatLineColor(record chatlog.Record) color.NRGBA {
 	switch record.Kind {
 	case chatlog.KindSay:
-		if strings.Contains(record.Raw, " says [low]: ") {
+		switch {
+		case strings.Contains(record.Raw, " says [low]: "):
 			return colorChatLow
+		case strings.Contains(record.Raw, " says [lower]: "):
+			return colorChatLower
 		}
 		return colorChatSay
 	case chatlog.KindWhisper:

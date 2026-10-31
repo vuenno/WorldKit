@@ -5,7 +5,7 @@ are. **Read this first, then `CLAUDE.md` (code rules) and `DESIGN.md` (visual ru
 Keep this file current: update it in the same change whenever features, structure or key
 decisions change.
 
-_Last updated: 2026-10-29_
+_Last updated: 2026-10-31_
 
 ## What it is
 
@@ -33,9 +33,9 @@ listed on the **Saved Screenshots** page.
 | Saved Screenshots| Done: every export (from `exports.json`) grouped by day: thumbnail, name, folder, size, format, file size; detail view; Show in folder; Delete (confirmed; only listed, unchanged files); missing files can be removed from the list |
 | Logs page        | Done: "Live now" card for the session being captured; sessions grouped Today / Yesterday / Earlier this week / month, each with start time, duration, characters, line count and a kind bar; search by character or date |
 | Log viewer       | Done: always-visible toolbar (find text, kind segments All/IC/me/do/b/PMs, Characters menu, timestamps switch), filter chips + Clear filters, timestamp column, drag/Shift+click/Ctrl+A/Esc selection, floating selection bar (Copy, **Extract image**, ×), toasts ("Screenshot saved · View" opens it) |
-| Extract dialog   | Done: **Extract image** opens a modal with a live preview, the Transparent/Dark/Light backdrop, the game's chat look as set in its settings — **Font** (Arial · Mukta) and **Chat scale** (50–150 %, steps of 5, default 100; the image grows with it) — and **Max width** (200–1800 px; lines wrap to fit, default the in-game chat width at any scale); "Save as they are, or edit them first?" → **Edit** makes the preview itself editable: drag/Shift+click/Ctrl+A to select text on the image, **Italic**, a color picker (chat colors) and **Default** apply to it; click and type, Backspace/Delete/Enter, arrows/Home/End, Ctrl+Z undo; **reorder lines** by dragging the grip beside each (or Alt+Up/Down); **Merge lines** joins the selected lines one person said ("X says: A." + "X says: B." → "X says: A. B."); **presets** of background, chat font and scale, and max width (older font-size presets get the nearest scale): pick one in the dialog, **Save as preset…**, the default one applies to the first extract |
+| Extract dialog   | Done: **Extract image** opens a modal with a live preview, the Transparent/Dark/Light backdrop, the game's chat look as set in its settings — **Font** (Arial · Mukta) and **Chat scale** (50–150 %, steps of 5, default 100; the image grows with it) — and **Max width** (200–1800 px; lines wrap to fit, default the in-game chat width at any scale); "Save as they are, or edit them first?" → **Edit** makes the preview itself editable: drag/Shift+click/Ctrl+A to select text on the image, **Italic**, a color picker (chat colors) and **Default** apply to it; click and type, Backspace/Delete/Enter, arrows/Home/End, Ctrl+Z undo; **reorder lines** by dragging the grip beside each (or Alt+Up/Down); **Merge lines** joins the selected lines one person said ("X says: A." + "X says: B." → "X says: A. B."); **presets** of background, chat font and scale, and max width (older font-size presets get the nearest scale): pick one in the dialog, **Save as preset…**, the default one applies to the first extract; **Copy image** (or Ctrl+C while the dialog is open) puts exactly what Save image would write on the clipboard (dialog stays open, toast "Image copied to clipboard") |
 | Screenshot look  | Done: markup `/italic/` and `*action*` (in the /me color), markers removed; Dark/Light backdrops are a box behind each row of text, transparent elsewhere |
-| Log Screenshots  | Done: gallery grouped by day, checkerboard 1:1 previews, hover actions (Show in folder, Delete); detail view with a Transparent/Dark/Light preview (boxes behind the text rows) and details; delete with confirmation |
+| Log Screenshots  | Done: gallery grouped by day, checkerboard 1:1 previews, hover actions (Show in folder, Delete); detail view with a Transparent/Dark/Light preview (boxes behind the text rows), **Copy image** (on the chosen background) and details; delete with confirmation |
 | Settings page    | Done: capture status, FiveM data folder with **Browse…** (Windows folder dialog), start with Windows switch, Log Screenshots card (extract presets: make default, delete), Screenshot Editor card (export folder with Browse…, export presets: make default, delete), logs/screenshots folders |
 | Branding         | Done: logo in sidebar header, exe/taskbar icon                         |
 | Chat capture     | Done: background polling of FiveM's KVS, one `.txt` per session, crash-safe appends |
@@ -43,7 +43,7 @@ listed on the **Saved Screenshots** page.
 | First-run prompts| Done: FiveM data folder (only if not found; Browse… or type), start with Windows (asked once) |
 | Persistence      | `%AppData%\WorldKit\settings.json` (incl. export folder and presets), `%AppData%\WorldKit\exports.json` (the export list), `%AppData%\WorldKit\logs\YYYY\MM\*.txt`, `%AppData%\WorldKit\screenshots\*.png`, `%AppData%\WorldKit\diagnostics\` (`app.log`, `crash-*.log`); exports wherever the user saves them (default `Pictures\WorldKit`) |
 | Releases         | Done: manual **Release** workflow (`.github/workflows/release.yml`) runs the checks, builds with the typed version and publishes an Inno Setup installer under a new `v<version>` tag |
-| Tests            | Animation, chat archive/parser/filter/library/summary, KVS reader, capture service, settings, diagnostics, folder picker setup, screenshot render/chat geometry against Chromium's measures (sizes, row heights, baselines, gamma buckets and curve, fake bold, hyphen breaks)/store (look round trip, older screenshots' row grids)/markup/document edits/hit-testing/backdrop boxes, DirectWrite glyph masks (against Chromium's), extract dialog and picture editor (lines, style, chat look, old presets, keys, restyle, undo), number stepper, UI texts (days, durations, counts), filters, chat lines, selection menu placement, icons, gallery layout; compose (transform, hit-testing, resize/rotate incl. rotated, snapping, reorder, canvas resize, history, placement, linear-light blending, exact 1:1 pixels, missing source, all formats, quantizer alpha), exports index (add/list/missing/remove, delete only listed unchanged files), file dialogs (COM setup, extensions), settings presets; benchmarks for 4K render/encode |
+| Tests            | Animation, chat archive/parser/filter/library/summary, KVS reader, capture service, settings, diagnostics, folder picker setup, screenshot render/chat geometry against Chromium's measures (sizes, row heights, baselines, gamma buckets and curve, fake bold, hyphen breaks)/store (look round trip, older screenshots' row grids)/markup/document edits/hit-testing/backdrop boxes (no side padding, baked backdrop for copying), clipboard bitmap layout (CF_DIBV5), DirectWrite glyph masks (against Chromium's), extract dialog and picture editor (lines, style, chat look, old presets, keys, restyle, undo), number stepper, UI texts (days, durations, counts), filters, chat lines, selection menu placement, icons, gallery layout; compose (transform, hit-testing, resize/rotate incl. rotated, snapping, reorder, canvas resize, history, placement, linear-light blending, exact 1:1 pixels, missing source, all formats, quantizer alpha), exports index (add/list/missing/remove, delete only listed unchanged files), file dialogs (COM setup, extensions), settings presets; benchmarks for 4K render/encode |
 
 ## Architecture
 
@@ -117,6 +117,7 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `internal/settings/`                   | `settings.json` load + atomic save                          |
 | `internal/diagnostics/`                | `Start`: `slog` → `app.log`, crash output → `crash-*.log`; `End`/`Close` |
 | `internal/filedialog/`                 | Windows file dialogs via COM, no CGO: `PickFolder`, `OpenFiles` (multi-select), `Save` (one file type, extension enforced) |
+| `internal/clipboard/`                  | `CopyImage`: an image on the Windows clipboard as `PNG` (transparency kept) and `CF_DIBV5`, via user32, no CGO |
 | `internal/directwrite/`                | DirectWrite via COM, no CGO: `Open` a font file, `GlyphMask` (one glyph at a fractional pen position, ClearType averaged to gray, as Chromium draws chat text) |
 | `internal/compose/`                    | Screenshot Editor model: `Composition`/`Layer` (center-based), geometry.go (`Transform`, hit-testing, handles, `Resized`, `Rotated`, `Snapped`), `History` (undo/redo), placement.go, decode.go (`ReadSize`, `Decode`, `Downscale`), render.go + linear.go (CPU export in linear light), encode.go (`Format`, PNG/JPEG), quantize.go (median cut + dithering), `Export` |
 | `internal/exports/`                    | `Index`: `exports.json` list of exports; `List` marks missing/changed files; `Delete` only listed, unchanged files |
@@ -160,6 +161,7 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `internal/ui/icons.go`                 | `strokeIcon`: line icons from a tiny SVG-path subset        |
 | `internal/ui/dialog.go`                | Modal `dialog`, `card`, `outlinedSurface`, `floatingSurface` |
 | `internal/ui/toast.go`                 | `toast`: timed confirmation with an optional link           |
+| `internal/ui/image_copy.go`            | `imageCopy`: draw + copy an image off the UI goroutine, then toast; `layoutCornerToast` |
 | `internal/ui/wrap.go`                  | `layoutWrappedCentered`: wrapping row layout                |
 | `internal/ui/load.go`                  | `backgroundLoad`: one disk read at a time off the UI goroutine |
 | `internal/ui/animation.go`             | `expandAnimation` (reversible 0↔1 progress) + easing        |
@@ -223,6 +225,16 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   dialog; usable as canvas sizes on the template screen and in the canvas menu (which also
   makes the next export start with them); the Settings default is where the export dialog
   starts the first time.
+- **The Extract dialog reads Ctrl+C before the log lines do.** The lines keep keyboard
+  focus behind the dialog, and Gio hands a key event to the first `gtx.Event` call in the
+  frame that matches it, so `logViewer.handleInput` updates the dialog first; its Ctrl+C
+  filter has no focus tag, so it fires whatever is focused (the lines, or the picture
+  editor after Edit).
+- **Images are copied through Win32, not Gio** (`internal/clipboard`; Gio's clipboard is
+  text-only): as `PNG`, which keeps transparency and is what Discord, browsers and image
+  editors paste, plus `CF_DIBV5` (straight alpha) for bitmap-only apps like Paint. Chat
+  images only (Extract dialog, Log Screenshot view); copying from the Screenshot Editor is
+  still a next step.
 - **No drag-and-drop or paste of images**: Gio on Windows delivers neither file drops nor
   image clipboard data, so images come in through the Open dialog (multi-select).
 - **One-off tools via `go run module@version`**, not `go.mod` `tool` entries, to keep the module
@@ -315,7 +327,9 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   kept. Lines must be next to each other (empty lines between are dropped), which is why
   merging comes with reordering.
 - **Backdrops are a box per row, not a fill.** Dark (`#000000`, the Magician's default) and
-  Light draw a box behind each drawn row, as wide as that row's text plus 5 px each side,
+  Light draw a box behind each drawn row, exactly as wide as that row's text (no side
+  padding, so no black reaches past a row's first or last letter; the Magician's 5 px was
+  dropped on request),
   rows flush, the rest of the image transparent: the same per-line `inline-block`
   background the Magician draws, so it reads like familiar chat screenshots and covers as
   little of the game picture as possible. One box around the whole block was the
@@ -344,7 +358,8 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   shown at 1 image px per screen px so text stays as crisp as in the file (no resampling).
 - **Chat colors come from the GTA World Chatlog Magician**
   (github.com/flipperatol121/chatlog-magician, the FiveM-era fork), which recreates the in-game
-  chat. One color per line: `[INFO]` lines are white, although the game draws the `[INFO]` tag
+  chat. One color per line (`says [low]` light gray `#C6C4C4`, `says [lower]` darker gray
+  `#939799`, as the Magician draws them): `[INFO]` lines are white, although the game draws the `[INFO]` tag
   blue; "near you" vs "far" brightness for says is not modeled.
 - **Filters are always visible** above the log (redesign): a find field, one line kind at a
   time (**All · IC · /me · /do · /b · PMs**; **IC** = says, shouts, whispers, `/me` and `/do`),
@@ -475,10 +490,9 @@ graphify explain "Sidebar"
 - Screenshots: measure how the game blends its chat layer onto the frame from a **lossless
   in-game capture** (Arial 60 % and Mukta 75 % over a plain background) and add that last
   step if it differs from Chromium's output; other resolutions than 1080p (the vh-based
-  sizes and shadow scale with screen height). **Copy image** to the clipboard (Gio's clipboard is text-only; needs Win32
-  `CF_PNG`/`CF_DIB`), link a screenshot back to its session. Extract
+  sizes and shadow scale with screen height). Link a screenshot back to its session. Extract
   dialog: a custom color besides the swatches, remember the last look between launches (today only a default preset
-  does); picture editor: double-click to select a word, Ctrl+C/Ctrl+V,
+  does); picture editor: double-click to select a word, Ctrl+V (Ctrl+C copies the image),
   Up/Down between rows, a blinking caret.
 - A second WorldKit instance exits with "keep previous app log … used by another process"
   (diagnostics start before the single-instance check) instead of saying it's already running.

@@ -16,6 +16,7 @@ import (
 	"gioui.org/widget/material"
 
 	"world-kit/internal/exports"
+	"world-kit/internal/screenshot"
 )
 
 // viewOutcome tells the screenshots page what happened in the open screenshot.
@@ -48,19 +49,23 @@ func backdropColor(backdrop int) color.NRGBA {
 }
 
 // screenshotView shows one screenshot in full at its real pixel size, with its details,
-// Show in folder and Delete.
+// Copy image, Show in folder and Delete.
 type screenshotView struct {
 	shot         loadedShot
 	back         widget.Clickable
+	copyImage    widget.Clickable
+	copier       *imageCopy
+	toast        toast
 	showInFolder widget.Clickable
 	delete       widget.Clickable
 	backdrop     *segmentedControl
 	list         widget.List
 }
 
-func newScreenshotView(shot loadedShot) *screenshotView {
+func newScreenshotView(shot loadedShot, invalidate func()) *screenshotView {
 	return &screenshotView{
 		shot:     shot,
+		copier:   newImageCopy(invalidate),
 		backdrop: newSegmentedControl("Transparent", "Dark", "Light"),
 		list:     widget.List{List: layout.List{Axis: layout.Vertical}},
 	}
@@ -69,6 +74,10 @@ func newScreenshotView(shot loadedShot) *screenshotView {
 // Update handles the view's buttons.
 func (v *screenshotView) Update(gtx layout.Context) viewOutcome {
 	v.backdrop.Update(gtx)
+	v.copier.ShowResult(gtx, &v.toast)
+	if v.copyImage.Clicked(gtx) && v.canCopy() {
+		v.startCopy()
+	}
 	if v.showInFolder.Clicked(gtx) {
 		revealFile(v.shot.shot.Path)
 	}
@@ -81,8 +90,23 @@ func (v *screenshotView) Update(gtx layout.Context) viewOutcome {
 	return viewOpen
 }
 
-// Layout draws the header, then the preview beside the details card.
+// canCopy reports whether Copy image can run: the image was read, and no copy is running.
+func (v *screenshotView) canCopy() bool {
+	return v.shot.pixels != nil && !v.copier.IsCopying()
+}
+
+// startCopy copies the shot as the preview shows it, on the chosen background.
+func (v *screenshotView) startCopy() {
+	pixels, boxes, backdrop := v.shot.pixels, v.shot.rowBoxes, backdropColor(v.backdrop.selected)
+	v.copier.Start(func() (image.Image, error) {
+		return screenshot.OnBackdrop(pixels, boxes, backdrop), nil
+	})
+}
+
+// Layout draws the header, then the preview beside the details card, and the copy toast
+// in the bottom-right corner.
 func (v *screenshotView) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensions {
+	defer layoutCornerToast(gtx, theme, &v.toast)
 	inset := layout.Inset{Left: spacingPage, Right: spacingPage, Top: spacingSmall, Bottom: spacingXLarge}
 	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -119,6 +143,11 @@ func (v *screenshotView) layoutHeader(gtx layout.Context, theme *material.Theme)
 			)
 		}),
 		layout.Rigid(layout.Spacer{Width: spacingLarge}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			copyButton := secondaryButton(&v.copyImage, "Copy image").withIcon(iconCopy)
+			return layoutEnabled(gtx, v.canCopy(), copyButton.Widget(theme))
+		}),
+		layout.Rigid(layout.Spacer{Width: spacingSmall}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return primaryButton(&v.showInFolder, "Show in folder").withIcon(iconFolder).Layout(gtx, theme)
 		}),

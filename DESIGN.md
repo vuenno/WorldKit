@@ -113,14 +113,15 @@ single-accent rule; use them only for chat text (and the session list's kind bar
 |------------------------|-----------|--------------------|
 | Says, shouts, server   | `#F1F1F1` | `colorChatSay`     |
 | Says [low]             | `#C6C4C4` | `colorChatLow`     |
+| Says [lower]           | `#939799` | `colorChatLower`   |
 | Whispers               | `#EDA841` | `colorChatWhisper` |
 | /me, /do               | `#C2A3DA` | `colorChatEmote`   |
 | /b (OOC)               | `#B8BEC7` | `colorChatOOC`     |
 | PMs                    | `#FBF724` | `colorChatPM`      |
 | Session start header   | `#939799` | `colorChatHeader`  |
 
-The extract dialog's color picker (`textSwatches`) offers these chat colors (say, low, /me,
-whisper, PM) plus the in-game color codes as the Magician draws them: red `#F00000`
+The extract dialog's color picker (`textSwatches`) offers these chat colors (say, low, lower,
+/me, whisper, PM) plus the in-game color codes as the Magician draws them: red `#F00000`
 (`colorChatRed`), green `#56D64B` (`colorChatGreen`), blue `#3896F3` (`colorChatBlue`), cyan
 `#33C1C9` (`colorChatCyan`), pink `#FF00BC` (`colorChatPink`).
 
@@ -347,7 +348,10 @@ up to `extractDialogWidth` (720 dp) over the log viewer.
   max width; the in-game width is saved as "in-game width". Suggested names and Settings
   rows read "Dark · Arial 60% · max 500 px".
 - The body scrolls; the buttons stay in view 24 dp below it: primary **Save image** (image
-  icon), secondary **Edit** (pencil icon; hidden once editing), secondary **Cancel**.
+  icon), secondary **Copy image** (copy icon; disabled while copying or with no text),
+  secondary **Edit** (pencil icon; hidden once editing), secondary **Cancel**. Copy image
+  (or **Ctrl+C**, anywhere while the dialog is open) keeps the dialog open and shows the toast "Image copied to clipboard" bottom-right,
+  above the dialog's scrim.
 - Italic, colors and Default act on the selection, or on all the text with nothing
   selected. Italic makes the selection italic, or upright when all of it already is.
 - Merge lines joins the selected lines into the first: later lines lose their timestamp
@@ -389,7 +393,8 @@ values (not dp/sp) because they describe the file, not the UI; they live in
   `2 * 3` and a /me line's leading `* ` stay as typed).
 - **Backdrop**: Transparent draws nothing behind the text. Dark/Light draw one box per
   drawn row: the row's height (13–14 px at Arial 60 %, rows alternate as their tops fall
-  between pixels), from 5 px left of its text to 5 px right of it, rows flush (a stepped
+  between pixels), exactly as wide as its text (no padding: the box never reaches past the
+  row's first or last letter), rows flush (a stepped
   shape for uneven lines), everything else transparent.
 
 ## Log Screenshots page
@@ -403,7 +408,9 @@ values (not dp/sp) because they describe the file, not the UI; they live in
   14 dp in; click opens it. Footer: save time ("14:18 UTC", 14 sp SemiBold) over "465 × 86 px";
   while hovered, ghost icon buttons Show in folder and Delete (danger).
 - **Open screenshot** (`screenshotView`): back; screen title "Saved today, 14:18 UTC" over the
-  size; primary **Show in folder**, danger icon button **Delete**. Below: the preview
+  size; secondary **Copy image** (copy icon: the image on the chosen Background, toast
+  "Image copied to clipboard" bottom-right), primary **Show in folder**, danger icon button
+  **Delete**. Below: the preview
   (rounded checkerboard, fills the space, image centered at 1:1, scrolls when taller) with
   "Background: Transparent · Dark · Light" under it: Dark/Light preview the boxes behind
   each row of text, as Extract draws them, not a fill; a **Details** card (Saved, Size, File,
