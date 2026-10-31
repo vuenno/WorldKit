@@ -65,7 +65,7 @@ jobs:
           --product-version "$VERSION" --file-version "$VERSION"
 
       - name: Build
-        run: go build -trimpath -ldflags="-H windowsgui -X world-kit/internal/ui.appVersion=$VERSION" -o bin/worldkit.exe ./cmd/worldkit
+        run: go build -trimpath -ldflags="-H windowsgui -X main.appVersion=$VERSION" -o bin/worldkit.exe ./cmd/worldkit
 
       - name: Install Inno Setup
         shell: pwsh
@@ -78,7 +78,12 @@ jobs:
         shell: pwsh
         run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:VERSION" installer\worldkit.iss'
 
+      # WorldKit's updater (internal/update) refuses an installer without this file.
+      - name: Write installer checksum
+        working-directory: bin
+        run: sha256sum "WorldKit-Setup-$VERSION.exe" > "WorldKit-Setup-$VERSION.exe.sha256"
+
       - name: Publish release
         run: >
-          gh release create "$TAG" "bin/WorldKit-Setup-$VERSION.exe"
+          gh release create "$TAG" "bin/WorldKit-Setup-$VERSION.exe" "bin/WorldKit-Setup-$VERSION.exe.sha256"
           --target "$GITHUB_SHA" --title "WorldKit $VERSION" --generate-notes

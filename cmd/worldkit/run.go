@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"gioui.org/app"
 	"gioui.org/unit"
@@ -20,9 +21,15 @@ import (
 	"world-kit/internal/screenshot"
 	"world-kit/internal/settings"
 	"world-kit/internal/ui"
+	"world-kit/internal/update"
 )
 
 const appName = "WorldKit"
+
+// appVersion is this build's version, shown in Settings and compared with GitHub's
+// releases. Release builds set it with -ldflags "-X main.appVersion=x.y.z"
+// (.github/workflows/release.yml); "dev" never updates.
+var appVersion = "dev"
 
 // run wires WorldKit's services to a window and blocks until the window is closed.
 // The returned error is also written to the diagnostics log, which main can't do: the log
@@ -33,7 +40,8 @@ func run(isMinimized bool) (runErr error) {
 		return fmt.Errorf("find app data folder: %w", err)
 	}
 	dataDir := filepath.Join(configDir, appName)
-	diagnosticsSession, err := diagnostics.Start(filepath.Join(dataDir, "diagnostics"))
+	diagnosticsDir := filepath.Join(dataDir, "diagnostics")
+	diagnosticsSession, err := diagnostics.Start(diagnosticsDir)
 	if err != nil {
 		return err
 	}
@@ -50,24 +58,37 @@ func run(isMinimized bool) (runErr error) {
 		DataDir:    store.Get().FiveMDataDir,
 		OnChange:   window.Invalidate,
 	})
+	updates := newUpdateService(store, diagnosticsDir, window.Invalidate)
 	ctx, cancel := context.WithCancel(context.Background())
-	captureStopped := make(chan struct{})
-	go func() {
-		captureService.Run(ctx)
-		close(captureStopped)
-	}()
+	var workers sync.WaitGroup
+	workers.Go(func() { captureService.Run(ctx) })
+	workers.Go(func() { updates.Run(ctx) })
 	defer func() {
 		cancel()
-		<-captureStopped
+		workers.Wait()
 	}()
 
 	services := newServices(captureService, store)
+	services.Updates = updates
+	services.Version = appVersion
 	services.Logs = chatlog.NewLibrary(archiveDir)
 	services.Files = filedialog.Dialog{}
 	services.Screenshots = screenshot.NewStore(filepath.Join(dataDir, "screenshots"))
 	services.Exports = exports.Open(filepath.Join(dataDir, "exports.json"))
 	services.DefaultExportDir = defaultExportDir()
 	return ui.Run(window, services)
+}
+
+// newUpdateService checks GitHub for newer releases: WorldKit's only network access.
+func newUpdateService(store *settings.Store, diagnosticsDir string, onChange func()) *update.Service {
+	return update.New(update.Options{
+		CurrentVersion: appVersion,
+		Client:         update.NewClient(update.ClientOptions{CurrentVersion: appVersion}),
+		Settings:       store,
+		DownloadDir:    filepath.Join(os.TempDir(), appName+"-update"),
+		InstallLogPath: filepath.Join(diagnosticsDir, "update-install.log"),
+		OnChange:       onChange,
+	})
 }
 
 // defaultExportDir is Pictures\WorldKit, where exports go until Settings says otherwise.

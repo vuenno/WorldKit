@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"log/slog"
 
 	"gioui.org/font"
@@ -9,11 +10,9 @@ import (
 	"gioui.org/widget/material"
 
 	"world-kit/internal/capture"
+	"world-kit/internal/settings"
+	"world-kit/internal/update"
 )
-
-// appVersion is shown at the bottom of Settings. Release builds set it with
-// -ldflags "-X world-kit/internal/ui.appVersion=x.y.z" (.github/workflows/release.yml).
-var appVersion = "dev"
 
 // SettingsPage shows where chat comes from, when WorldKit runs and where its files go.
 type SettingsPage struct {
@@ -25,6 +24,9 @@ type SettingsPage struct {
 	extractSettings  *extractSettings
 	startupSwitch    toggleSwitch
 	startupErrorText string
+	updateSwitch     toggleSwitch
+	updateErrorText  string
+	checkNow         widget.Clickable
 }
 
 // NewSettingsPage creates the page; call SyncStartupSwitch once services are available.
@@ -50,6 +52,11 @@ func (p *SettingsPage) SyncStartupSwitch(startup StartupEntry) {
 	p.startupSwitch.value.Value = isEnabled
 }
 
+// SyncUpdateSwitch shows whether WorldKit checks for updates on its own.
+func (p *SettingsPage) SyncUpdateSwitch(store SettingsStore) {
+	p.updateSwitch.value.Value = !store.Get().IsUpdateCheckOff
+}
+
 // Layout handles input, then draws the page.
 func (p *SettingsPage) Layout(gtx layout.Context, theme *material.Theme, services Services) layout.Dimensions {
 	p.handleInput(gtx, services)
@@ -68,9 +75,12 @@ func (p *SettingsPage) Layout(gtx layout.Context, theme *material.Theme, service
 		},
 		func(gtx layout.Context) layout.Dimensions { return p.exportSettings.Layout(gtx, theme, services) },
 		func(gtx layout.Context) layout.Dimensions { return p.layoutFilesSection(gtx, theme, services) },
-		styledLabel(theme, textSizeCaption, font.Normal, colorTextTertiary,
-			"WorldKit "+appVersion+" · Reads FiveM's chat store passively; never touches the game.").Layout,
 	)
+	if services.Updates != nil {
+		sections = append(sections, func(gtx layout.Context) layout.Dimensions { return p.layoutUpdatesSection(gtx, theme, services) })
+	}
+	sections = append(sections, styledLabel(theme, textSizeCaption, font.Normal, colorTextTertiary,
+		"WorldKit "+cmp.Or(services.Version, "dev")+" · Reads FiveM's chat store passively; never touches the game.").Layout)
 	inset := layout.Inset{Left: spacingPage, Right: spacingPage, Top: spacingSmall}
 	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return styledList(theme, &p.list).Layout(gtx, len(sections), func(gtx layout.Context, index int) layout.Dimensions {
@@ -88,6 +98,7 @@ func (p *SettingsPage) handleInput(gtx layout.Context, services Services) {
 	if p.openScreenshots.Clicked(gtx) {
 		openFolder(services.Screenshots.Dir())
 	}
+	p.handleUpdateInput(gtx, services)
 	if services.Startup == nil || !p.startupSwitch.Update(gtx) {
 		return
 	}
@@ -135,6 +146,49 @@ func (p *SettingsPage) layoutStartupSection(gtx layout.Context, theme *material.
 				"Chat is only saved while WorldKit runs. It starts in the taskbar, out of your way.",
 				p.startupErrorText, p.startupSwitch.Layout)
 		}},
+	}.Layout(gtx, theme)
+}
+
+func (p *SettingsPage) handleUpdateInput(gtx layout.Context, services Services) {
+	if services.Updates == nil {
+		return
+	}
+	if p.checkNow.Clicked(gtx) {
+		services.Updates.CheckNow()
+	}
+	if !p.updateSwitch.Update(gtx) {
+		return
+	}
+	p.updateErrorText = ""
+	isOn := p.updateSwitch.value.Value
+	if err := services.Settings.Update(func(s *settings.Settings) { s.IsUpdateCheckOff = !isOn }); err != nil {
+		slog.Error("change automatic update checks", "error", err)
+		p.updateSwitch.value.Value = !isOn
+		p.updateErrorText = "Couldn't save this setting."
+	}
+}
+
+func (p *SettingsPage) layoutUpdatesSection(gtx layout.Context, theme *material.Theme, services Services) layout.Dimensions {
+	status := services.Updates.Status()
+	canCheck := status.State != update.StateDevBuild && status.State != update.StateChecking
+	return settingsCard{
+		title: "Updates",
+		rows: []layout.Widget{
+			func(gtx layout.Context) layout.Dimensions {
+				return settingRow(gtx, theme, "Check for updates automatically",
+					"Once a day WorldKit asks GitHub whether a newer version is out. Nothing about you or your logs is sent.",
+					p.updateErrorText, p.updateSwitch.Layout)
+			},
+			func(gtx layout.Context) layout.Dimensions {
+				statusText := updateStatusText(status, !p.updateSwitch.value.Value)
+				return settingRow(gtx, theme, "WorldKit "+cmp.Or(services.Version, "dev"), statusText, "",
+					func(gtx layout.Context) layout.Dimensions {
+						return layoutEnabled(gtx, canCheck, func(gtx layout.Context) layout.Dimensions {
+							return secondaryButton(&p.checkNow, "Check now").withHeight(controlHeightCompact).Layout(gtx, theme)
+						})
+					})
+			},
+		},
 	}.Layout(gtx, theme)
 }
 

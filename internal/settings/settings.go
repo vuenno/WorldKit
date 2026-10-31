@@ -10,6 +10,7 @@ import (
 	"os"
 	"slices"
 	"sync"
+	"time"
 
 	"world-kit/internal/atomicfile"
 )
@@ -33,6 +34,15 @@ type Settings struct {
 	ExtractPresets []ExtractPreset `json:"extractPresets,omitempty"`
 	// DefaultExtractPreset names the preset Extract image starts with; empty: the defaults.
 	DefaultExtractPreset string `json:"defaultExtractPreset,omitempty"`
+	// IsUpdateCheckOff is true when the user turned off the daily check for a newer
+	// WorldKit (Settings → Updates). Off by default, so checks are on.
+	IsUpdateCheckOff bool `json:"updateCheckOff,omitempty"`
+	// LastUpdateCheck is when GitHub last answered a check for updates.
+	LastUpdateCheck time.Time `json:"lastUpdateCheck,omitzero"`
+	// SkippedUpdate is a version the user chose not to install ("Skip this version").
+	SkippedUpdate string `json:"skippedUpdate,omitempty"`
+	// RemindUpdateAfter is when an update the user put off with "Later" is offered again.
+	RemindUpdateAfter time.Time `json:"remindUpdateAfter,omitzero"`
 }
 
 // ExportPreset is a saved combination of file format, quality and canvas size.

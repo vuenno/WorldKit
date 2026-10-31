@@ -43,6 +43,10 @@ code, whenever the change is worth noting:
   exclusive file handles (single-instance archive lock) and the image clipboard. Images are
   copied as both `PNG` (keeps transparency) and `CF_DIBV5`; Gio's clipboard is text-only.
 - **Platform:** Windows only (amd64). Don't add code paths, build tags or resources for other OSes/arches.
+- **Network: only `internal/update`**, and only GitHub: the latest-release API for
+  `vuenno/WorldKit` (about once a day, switchable in Settings) and that release's own
+  assets. Network failures are logged, never shown as errors. No other network access
+  (telemetry, other hosts) without discussion.
 - **Never open FiveM's live data.** Copy `%AppData%\CitizenFX\kvs` to a temp folder and read the copy.
 - **User data** lives in `os.UserConfigDir()\WorldKit` (`%AppData%\WorldKit`): `settings.json`,
   `exports.json`, `logs\` and `screenshots\`. Chat logs are stored raw (one `.txt` per session) and parsed on
@@ -187,8 +191,11 @@ go mod tidy                           # keep go.mod clean
 
 **Releasing:** GitHub → Actions → **Release** → Run workflow, enter the version (`0.2.0`, no `v`).
 It runs the checks, builds with that version, packs `installer/worldkit.iss` with Inno Setup 6
-and publishes `WorldKit-Setup-<version>.exe` as release `v<version>` (creating the tag). Never
-hard-code the version: `appVersion` is set with `-ldflags -X` and CI re-stamps the exe resources.
+and publishes `WorldKit-Setup-<version>.exe` plus its `.sha256` as release `v<version>`
+(creating the tag). Installed copies find it and update themselves (`internal/update`), so
+keep the asset names, the `.sha256` file and the installer's `/WAITPID` / `/RELAUNCH`
+switches working. Never hard-code the version: `main.appVersion` (`cmd/worldkit/run.go`) is
+set with `-ldflags -X` and CI re-stamps the exe resources.
 To try the installer locally (needs Inno Setup 6, after the release build above):
 
 ```bash

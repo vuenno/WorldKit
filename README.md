@@ -94,7 +94,9 @@ Saved Screenshots page.
 3. Play. Your chat is saved as you go.
 
 WorldKit runs on Windows 10 and 11 (64-bit) and can start with Windows. Your logs,
-screenshots and settings stay on your PC in `%AppData%\WorldKit`.
+screenshots and settings stay on your PC in `%AppData%\WorldKit`. Once a day it asks
+GitHub whether a new version is out and offers to update itself (Settings → Updates turns
+this off); that is the only time it goes online.
 
 ## Build from source
 

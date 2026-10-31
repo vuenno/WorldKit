@@ -60,6 +60,8 @@ type Shell struct {
 	settingsPage    *SettingsPage
 	dataDirPrompt   *dataDirPrompt
 	startupPrompt   *startupPrompt
+	updatePrompt    *updatePrompt
+	perform         func(system.Action)
 }
 
 // NewShell creates the shell with WorldKit's navigation destinations. invalidate redraws
@@ -74,6 +76,7 @@ func NewShell(services Services, invalidate func(), perform func(system.Action))
 	settingsItem := NewNavItem("Settings", iconSliders)
 	settingsPage := NewSettingsPage(invalidate)
 	settingsPage.SyncStartupSwitch(services.Startup)
+	settingsPage.SyncUpdateSwitch(services.Settings)
 	mainItems := []*NavItem{logsItem, screenshotsItem, editorItem, exportsItem}
 	return &Shell{
 		services:        services,
@@ -91,6 +94,8 @@ func NewShell(services Services, invalidate func(), perform func(system.Action))
 		settingsPage:    settingsPage,
 		dataDirPrompt:   &dataDirPrompt{form: newDataDirForm(invalidate, buttonPrimary)},
 		startupPrompt:   &startupPrompt{},
+		updatePrompt:    newUpdatePrompt(invalidate),
+		perform:         perform,
 	}
 }
 
@@ -98,6 +103,10 @@ func NewShell(services Services, invalidate func(), perform func(system.Action))
 func (s *Shell) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensions {
 	if s.services.Startup != nil && s.startupPrompt.Update(gtx, s.services) {
 		s.settingsPage.SyncStartupSwitch(s.services.Startup)
+	}
+	if s.updatePrompt.Update(gtx, s.services) {
+		// The installer is waiting for WorldKit to exit before it replaces the exe.
+		s.perform(system.ActionClose)
 	}
 	s.followViewShotLink(gtx)
 	if s.exportsPage.OpenEditorClicked(gtx) {
@@ -112,7 +121,11 @@ func (s *Shell) Layout(gtx layout.Context, theme *material.Theme) layout.Dimensi
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(s.titleBar.Layout),
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return s.layoutPage(gtx, theme) }),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					dims := s.layoutPage(gtx, theme)
+					s.updatePrompt.Layout(gtx, theme, s.services)
+					return dims
+				}),
 			)
 		}),
 	)

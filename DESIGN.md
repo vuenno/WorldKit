@@ -157,6 +157,7 @@ Spacing follows a 4 dp grid: `spacingTiny` 4, `spacingSmall` 8, `spacingMedium` 
 | `iconSize` / `iconSizeButton` / `iconSizeSmall` | 18 / 16 / 15 dp | Nav / buttons / compact controls |
 | `contentMaxWidth`       | 960 dp | Logs list                             |
 | `settingsMaxWidth`      | 720 dp | Settings                              |
+| `updatePromptWidth`     | 380 dp | Max width of the update card          |
 | `dialogWidth`           | 440 dp | Max dialog width                      |
 | `extractDialogWidth`    | 720 dp | Max width of the Extract image dialog |
 | `swatchSize`            | 22 dp  | Color swatches (`swatchRingWidth` 2 dp hover ring) |
@@ -214,6 +215,13 @@ Line icons on a 24-unit grid with 1.8-unit rounded strokes (`strokeIcon`,
   `radiusFloating` and a soft shadow; menus and toasts.
 - **Toast** (`toast`): floating, bottom-right of its area, check icon in `colorLive` (or ×
   in `colorDanger`), 13 sp message, optional link; hides after `toastDuration` (4 s).
+- **Update card** (`updatePrompt`): a floating surface 16 dp in from the page area's
+  bottom-left (toasts keep the bottom-right), ≤ `updatePromptWidth`, 16 dp padding. Orange
+  18 dp download icon, 12 dp gap, then "WorldKit 0.3.0 is available" (14 sp SemiBold),
+  caption "You have 0.2.0." + link **Release notes**, 12 dp, a 32 dp primary **Update now**
+  and secondary **Later** (8 dp apart), 12 dp, link **Skip this version**. While
+  downloading the button reads "Downloading…" and the actions are disabled; a failed
+  download shows a danger caption. Not modal: the page stays usable.
 - **Dialog** (`dialog`): `colorScrim` over the window, centered card ≤ `dialogWidth` (or
   its `width`): screen title, secondary body text, 24 dp, controls (primary/danger first).
 - **Color swatch** (`layoutSwatch`): a 22 dp dot in its color; hovered, a 2 dp
@@ -435,6 +443,11 @@ values (not dp/sp) because they describe the file, not the UI; they live in
     delete icon; "No presets yet." when empty. Presets are made in the export dialog.
   - **Files**: Chat logs / Screenshots rows with their path (Geist Mono caption) and an
     **Open folder** button.
+  - **Updates**: "Check for updates automatically" + description, switch (on by default);
+    then "WorldKit <version>" with a status caption ("You have the latest version.",
+    "Version 0.3.0 is available.", "Checking for updates…", "Couldn't reach GitHub. Try
+    again later.") and a 36 dp secondary **Check now** (disabled while checking and in dev
+    builds).
 - Footer caption: version and "Reads FiveM's chat store passively; never touches the game."
 - In the first-run "Where is FiveM's data?" dialog, Browse… is the primary button.
 

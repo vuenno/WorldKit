@@ -30,6 +30,8 @@ type Services struct {
 	Exports     ExportList
 	// DefaultExportDir is where exports go until the user picks a folder in Settings.
 	DefaultExportDir string
+	Updates          UpdateService // nil: no update checks
+	Version          string        // this build's version; "dev" for a local build
 
 	window uintptr // the window's handle, so dialogs can be modal to it; set by Run
 }

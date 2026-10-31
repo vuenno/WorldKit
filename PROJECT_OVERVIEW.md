@@ -36,25 +36,27 @@ listed on the **Saved Screenshots** page.
 | Extract dialog   | Done: **Extract image** opens a modal with a live preview, the Transparent/Dark/Light backdrop, the game's chat look as set in its settings — **Font** (Arial · Mukta) and **Chat scale** (50–150 %, steps of 5, default 100; the image grows with it) — and **Max width** (200–1800 px; lines wrap to fit, default the in-game chat width at any scale); "Save as they are, or edit them first?" → **Edit** makes the preview itself editable: drag/Shift+click/Ctrl+A to select text on the image, **Italic**, a color picker (chat colors) and **Default** apply to it; click and type, Backspace/Delete/Enter, arrows/Home/End, Ctrl+Z undo; **reorder lines** by dragging the grip beside each (or Alt+Up/Down); **Merge lines** joins the selected lines one person said ("X says: A." + "X says: B." → "X says: A. B."); **presets** of background, chat font and scale, and max width (older font-size presets get the nearest scale): pick one in the dialog, **Save as preset…**, the default one applies to the first extract; **Copy image** (or Ctrl+C while the dialog is open) puts exactly what Save image would write on the clipboard (dialog stays open, toast "Image copied to clipboard") |
 | Screenshot look  | Done: markup `/italic/` and `*action*` (in the /me color), markers removed; Dark/Light backdrops are a box behind each row of text, transparent elsewhere |
 | Log Screenshots  | Done: gallery grouped by day, checkerboard 1:1 previews, hover actions (Show in folder, Delete); detail view with a Transparent/Dark/Light preview (boxes behind the text rows), **Copy image** (on the chosen background) and details; delete with confirmation |
-| Settings page    | Done: capture status, FiveM data folder with **Browse…** (Windows folder dialog), start with Windows switch, Log Screenshots card (extract presets: make default, delete), Screenshot Editor card (export folder with Browse…, export presets: make default, delete), logs/screenshots folders |
+| Settings page    | Done: capture status, FiveM data folder with **Browse…** (Windows folder dialog), start with Windows switch, Log Screenshots card (extract presets: make default, delete), Screenshot Editor card (export folder with Browse…, export presets: make default, delete), logs/screenshots folders, Updates card (automatic checks switch, version + **Check now**) |
+| Auto-update      | Done: at startup and about once a day (`update.CheckInterval`, 20 h; failures retried after an hour, only logged) asks GitHub for the latest `v<version>` release of `vuenno/WorldKit` and compares it as semver with the build's version (a `dev` build never checks); a card in the page area's bottom-left offers it (**Update now**, **Later** = 24 h, **Skip this version**, **Release notes**); Update now downloads `WorldKit-Setup-<version>.exe` to `%TEMP%\WorldKit-update`, checks its size and SHA-256 (the release's `.sha256` asset), runs it silently and quits; the installer waits for WorldKit to exit, upgrades in place and starts it again. Not yet tried end to end with two real releases |
 | Branding         | Done: logo in sidebar header, exe/taskbar icon                         |
 | Chat capture     | Done: background polling of FiveM's KVS, one `.txt` per session, crash-safe appends |
 | Chat parsing     | Done: `chatlog.Parse` → records with time, kind, speaker, text; `chatlog.Filter`; `chatlog.Summarize` |
 | First-run prompts| Done: FiveM data folder (only if not found; Browse… or type), start with Windows (asked once) |
-| Persistence      | `%AppData%\WorldKit\settings.json` (incl. export folder and presets), `%AppData%\WorldKit\exports.json` (the export list), `%AppData%\WorldKit\logs\YYYY\MM\*.txt`, `%AppData%\WorldKit\screenshots\*.png`, `%AppData%\WorldKit\diagnostics\` (`app.log`, `crash-*.log`); exports wherever the user saves them (default `Pictures\WorldKit`) |
-| Releases         | Done: manual **Release** workflow (`.github/workflows/release.yml`) runs the checks, builds with the typed version and publishes an Inno Setup installer under a new `v<version>` tag |
-| Tests            | Animation, chat archive/parser/filter/library/summary, KVS reader, capture service, settings, diagnostics, folder picker setup, screenshot render/chat geometry against Chromium's measures (sizes, row heights, baselines, gamma buckets and curve, fake bold, hyphen breaks)/store (look round trip, older screenshots' row grids)/markup/document edits/hit-testing/backdrop boxes (no side padding, baked backdrop for copying), clipboard bitmap layout (CF_DIBV5), DirectWrite glyph masks (against Chromium's), extract dialog and picture editor (lines, style, chat look, old presets, keys, restyle, undo), number stepper, UI texts (days, durations, counts), filters, chat lines, selection menu placement, icons, gallery layout; compose (transform, hit-testing, resize/rotate incl. rotated, snapping, reorder, canvas resize, history, placement, linear-light blending, exact 1:1 pixels, missing source, all formats, quantizer alpha), exports index (add/list/missing/remove, delete only listed unchanged files), file dialogs (COM setup, extensions), settings presets; benchmarks for 4K render/encode |
+| Persistence      | `%AppData%\WorldKit\settings.json` (incl. export folder and presets, last update check, skipped/Later answers), `%AppData%\WorldKit\exports.json` (the export list), `%AppData%\WorldKit\logs\YYYY\MM\*.txt`, `%AppData%\WorldKit\screenshots\*.png`, `%AppData%\WorldKit\diagnostics\` (`app.log`, `crash-*.log`, `update-install.log`); exports wherever the user saves them (default `Pictures\WorldKit`) |
+| Releases         | Done: manual **Release** workflow (`.github/workflows/release.yml`) runs the checks, builds with the typed version and publishes an Inno Setup installer and its `.sha256` under a new `v<version>` tag |
+| Tests            | Animation, chat archive/parser/filter/library/summary, KVS reader, capture service, settings, diagnostics, folder picker setup, screenshot render/chat geometry against Chromium's measures (sizes, row heights, baselines, gamma buckets and curve, fake bold, hyphen breaks)/store (look round trip, older screenshots' row grids)/markup/document edits/hit-testing/backdrop boxes (no side padding, baked backdrop for copying), clipboard bitmap layout (CF_DIBV5), DirectWrite glyph masks (against Chromium's), extract dialog and picture editor (lines, style, chat look, old presets, keys, restyle, undo), number stepper, UI texts (days, durations, counts), filters, chat lines, selection menu placement, icons, gallery layout; compose (transform, hit-testing, resize/rotate incl. rotated, snapping, reorder, canvas resize, history, placement, linear-light blending, exact 1:1 pixels, missing source, all formats, quantizer alpha), exports index (add/list/missing/remove, delete only listed unchanged files), file dialogs (COM setup, extensions), settings presets; update (semver parse/compare, check schedule, Skip/Later, GitHub release parsing and URL checks, download size/hash checks, installer switches, service: dev builds, checks off, manual checks) and update status texts; benchmarks for 4K render/encode |
 
 ## Architecture
 
 ```
 main()  (-minimized flag)               cmd/worldkit/main.go
- └─ run()                               cmd/worldkit/run.go  wiring: diagnostics, settings, capture, autostart, window
+ └─ run()                               cmd/worldkit/run.go  wiring: diagnostics, settings, capture, updates, autostart, window
      ├─ capture.Service.Run(ctx)        internal/capture     goroutine, polls every 3 s
+     ├─ update.Service.Run(ctx)         internal/update      goroutine, wakes hourly; asks GitHub when due or on Check now
      │   ├─ fivem.ReadStamp / ReadChatLog   internal/fivem   copy KVS → temp, goleveldb read-only
      │   └─ chatlog.Archive.Save        internal/chatlog     append new lines to the session file
      └─ ui.Run(window, Services)        internal/ui/app.go   event loop: one Shell.Layout per frame
-         └─ Shell                       internal/ui/app.go   sidebar | title bar over the page | prompt
+         └─ Shell                       internal/ui/app.go   sidebar | title bar over the page (+ updatePrompt) | prompt
              ├─ Sidebar                 internal/ui/sidebar.go  brand (move area), NavItems, captureCard, Settings
              ├─ titleBar                internal/ui/title_bar.go move area + caption buttons → window.Perform
              ├─ page: LogsPage | ScreenshotsPage | EditorPage | ExportsPage | SettingsPage
@@ -71,6 +73,7 @@ main()  (-minimized flag)               cmd/worldkit/main.go
              │   │   └─ exportDialog    Save As (filedialog) → compose.Export (CPU, linear light) → exports.Index.Add
              │   ├─ ExportsPage         internal/ui/exports_page.go exportRows (lazy thumbnails) ──► exportView; shotDeletion
              │   └─ SettingsPage        internal/ui/settings_page.go dataDirForm (Browse… → filedialog), exportSettings
+             ├─ updatePrompt            internal/ui/update_prompt.go  Update now → Updates.Install (backgroundLoad) → close window
              └─ prompt: dataDirPrompt (capture needs a folder) | startupPrompt (not answered yet)
 controls, text styles, icons            internal/ui/button.go, controls.go, text.go, icons.go
 theme tokens + fonts                    internal/ui/theme.go (mirrors DESIGN.md), fonts.go (embedded Geist)
@@ -80,7 +83,7 @@ assets.MuktaRegular                     assets/chatfonts/    Mukta for chat scre
 
 The UI talks to domain code only through the small interfaces in `ui.Services`
 (`CaptureService`, `SettingsStore`, `LogLibrary`, `ScreenshotStore`, `StartupEntry`,
-`FileDialogs`, `ExportList`, plus `DefaultExportDir`); capture calls `window.Invalidate` when its status changes, and so does
+`FileDialogs`, `ExportList`, `UpdateService`, plus `DefaultExportDir` and `Version`); capture and the update service call `window.Invalidate` when their status changes, and so does
 `backgroundLoad` when a disk read finishes. `Run` also records the window handle
 (`app.Win32ViewEvent`) so the folder dialog is modal to WorldKit.
 
@@ -110,11 +113,12 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | Path                                   | Purpose                                                     |
 |----------------------------------------|-------------------------------------------------------------|
 | `cmd/worldkit/main.go`                 | Parses `-minimized`, starts `run` and the Gio main loop     |
-| `cmd/worldkit/run.go`                  | Builds diagnostics, settings, capture, folder picker, startup entry, undecorated window (1280×820, min 900×600) |
+| `cmd/worldkit/run.go`                  | `appVersion` (set by the release build); builds diagnostics, settings, capture, the update service, folder picker, startup entry, undecorated window (1280×820, min 900×600) |
 | `internal/fivem/`                      | Finds FiveM's KVS, copies it, reads the GTA World chat log; MessagePack string decoder |
 | `internal/chatlog/`                    | `Archive` (session files, lock, crash repair), `Parse` (line kinds, midnight rollover), `Library` (list/read sessions), `Filter` (names + kinds), `Characters` (speakers by line count), `Summarize` (counts by kind, time span) |
 | `internal/capture/`                    | Background `Service`: polling loop, data folder changes, `Status` |
 | `internal/settings/`                   | `settings.json` load + atomic save                          |
+| `internal/update/`                     | Self-update: `Version` (semver), `Client` (`Latest` from GitHub's API, `Download` with size + SHA-256 checks), `StartInstaller` (silent Inno Setup switches), `IsCheckDue` / `ShouldOffer`, `Service` (background checks, `Offer`, `RemindLater`, `Skip`, `Install`) |
 | `internal/diagnostics/`                | `Start`: `slog` → `app.log`, crash output → `crash-*.log`; `End`/`Close` |
 | `internal/filedialog/`                 | Windows file dialogs via COM, no CGO: `PickFolder`, `OpenFiles` (multi-select), `Save` (one file type, extension enforced) |
 | `internal/clipboard/`                  | `CopyImage`: an image on the Windows clipboard as `PNG` (transparency kept) and `CF_DIBV5`, via user32, no CGO |
@@ -164,6 +168,7 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `internal/ui/image_copy.go`            | `imageCopy`: draw + copy an image off the UI goroutine, then toast; `layoutCornerToast` |
 | `internal/ui/wrap.go`                  | `layoutWrappedCentered`: wrapping row layout                |
 | `internal/ui/load.go`                  | `backgroundLoad`: one disk read at a time off the UI goroutine |
+| `internal/ui/update_prompt.go`         | `UpdateService`, `updatePrompt` (the update card), `updateStatusText`, `openURL` |
 | `internal/ui/animation.go`             | `expandAnimation` (reversible 0↔1 progress) + easing        |
 | `internal/ui/logo.go`                  | `Logo` widget (sharp at any DPI)                            |
 | `internal/ui/theme.go`, `fonts.go`     | All design tokens and `NewTheme()`; embedded-font shaper    |
@@ -171,7 +176,7 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 | `assets/chatfonts/`                    | `Mukta-Regular.ttf` (Google Fonts' Mukta, the file the game loads) + its `OFL.txt`; screenshots only, never the UI |
 | `cmd/worldkit/rsrc_windows_amd64.syso` | Generated exe icon + manifest; linked automatically by `go build` |
 | `.github/workflows/release.yml`        | Manual release: checks, versioned build, installer, tag + GitHub release |
-| `installer/worldkit.iss`               | Inno Setup script: per-user install, Start menu entry, uninstall keeps user data |
+| `installer/worldkit.iss`               | Inno Setup script: per-user install, Start menu entry, uninstall keeps user data; self-update switches `/WAITPID` and `/RELAUNCH` (`[Code]`) |
 | `README.md`, `docs/screenshots/`       | Public front page (logo, release badge, features, install); its images: chat images rendered by `screenshot.Render`, app screenshots and two RP scenes captured from WorldKit run with a throwaway `%APPDATA%` of made-up sessions (no real logs or names) |
 | `CLAUDE.md`                            | Code rules, commands, commit checklist                      |
 | `DESIGN.md`                            | Tokens, typography, components and every screen's layout    |
@@ -396,10 +401,30 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   if history grows much larger.
 - **Releases come from a manual workflow, versioned at build time.** The version is typed when
   the workflow runs; CI stamps it into the exe resources (go-winres) and Settings
-  (`-X world-kit/internal/ui.appVersion`), so nothing is bumped by hand. Local builds show `dev`.
+  (`-X main.appVersion`, in `cmd/worldkit/run.go`), so nothing is bumped by hand. Local builds
+  show `dev`.
 - **Per-user Inno Setup installer** (`%LocalAppData%\Programs\WorldKit`, no admin prompt),
   matching the per-user startup entry. Uninstall removes that entry but keeps `%AppData%\WorldKit`
   (chat logs are irreplaceable).
+- **Auto-update is WorldKit's first and only network access.** Before it WorldKit never
+  went online (the forum post says so). Players had to notice new releases and reinstall by
+  hand, so most would stay on old versions. Only `internal/update` uses the network: one
+  GET to `api.github.com/repos/vuenno/WorldKit/releases/latest` about once a day (with a
+  `WorldKit/<version>` User-Agent, nothing else), and the release's own files from
+  `github.com/vuenno/WorldKit/releases/download/` after **Update now**; any other URL in
+  GitHub's answer is refused. Failures are logged with `slog` and never shown, except as
+  the Settings status line. Checks can be turned off in Settings. Alternatives: a "new
+  version" link only (players wouldn't look), or an update library (unneeded: GitHub's API
+  plus the existing installer covers it with the standard library).
+- **Updates run the normal installer silently**, not an in-place exe swap: the installer
+  already knows the install folder, shortcuts, tasks and uninstall entry. WorldKit starts
+  it with `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /RELAUNCH=1
+  /WAITPID=<pid> /LOG=…\diagnostics\update-install.log` and closes its window; the script
+  waits up to 30 s for that process (Restart Manager closes it otherwise), upgrades in
+  place and starts the new WorldKit (a `[Run]` entry with `Check: IsRelaunch`). The
+  download must match the release's listed size and the `.sha256` file the workflow
+  publishes; a release without one is never installed. There is no code signing yet, so
+  this guards against broken downloads, not against a compromised GitHub account.
 
 ## Known gotchas
 
@@ -454,6 +479,10 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 - **Pointer positions are local** to the handler's area: in headless tests, add the area's
   window offset before queuing events (`canvasView` sits below the toolbar, right of the
   sidebar).
+- **Update checks run only in release builds**: `appVersion` must parse as a version, so
+  `go run` (`dev`) never checks. To try the updater locally, build with
+  `-ldflags "-X main.appVersion=0.0.1"`; **Update now** then installs the real latest
+  release over the per-user install.
 - **Start with Windows registers the running exe.** Enabling it from `go run` registers a temp
   build; use the release build.
 
@@ -501,6 +530,10 @@ graphify explain "Sidebar"
 - Tray icon so WorldKit can keep capturing with its window closed.
 - Bring back more nav destinations when they have real content.
 - Persist sidebar expanded/collapsed state and last page between launches.
+- Auto-update: try it end to end once two releases with `.sha256` files exist (the
+  installer's `[Code]` is only compiled by Inno Setup, which the dev machine lacks); sign
+  the installer and exe and verify the signature before running a download; show download
+  progress.
 - Screenshot Editor: drag to reorder layers, snapping to other layers' edges, paste/copy
   images (Win32 clipboard), save and reopen work in progress (a small project JSON
   referencing the source files), crop, a **Use in editor** button on a Log Screenshot,

@@ -143,8 +143,10 @@ const (
 	dialogWidth      = unit.Dp(440)
 	contentMaxWidth  = unit.Dp(960) // Logs list
 	settingsMaxWidth = unit.Dp(720)
-	searchFieldWidth = unit.Dp(300)
-	findFieldWidth   = unit.Dp(240)
+	// updatePromptWidth is the most the "WorldKit x.y.z is available" card takes.
+	updatePromptWidth = unit.Dp(380)
+	searchFieldWidth  = unit.Dp(300)
+	findFieldWidth    = unit.Dp(240)
 
 	chatLineHeight          = unit.Sp(22)
 	chatLinePaddingY        = unit.Dp(3)
