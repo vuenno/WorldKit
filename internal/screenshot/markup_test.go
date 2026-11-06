@@ -45,6 +45,14 @@ func TestParseMarkup(t *testing.T) {
 			"*sighs /loudly/*",
 			[]Span{{"sighs ", emote, false}, {"loudly", emote, true}},
 		},
+		{"highlight marker", "[!] Jo says: hi", []Span{{"[!]", emote, false}, {" Jo says: hi", say, false}}},
+		{
+			"highlight marker after timestamp",
+			"[10:00:00] [!] Jo says: hi",
+			[]Span{{"[10:00:00] ", say, false}, {"[!]", emote, false}, {" Jo says: hi", say, false}},
+		},
+		{"highlight marker mid-line stays", "Jo says: [!] hi", []Span{{"Jo says: [!] hi", say, false}}},
+		{"do line trailing asterisk stays", "* It rains. (( Jo ))*", []Span{{"* It rains. (( Jo ))*", say, false}}},
 		{"empty", "", nil},
 	}
 	for _, test := range tests {

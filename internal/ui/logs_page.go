@@ -370,7 +370,7 @@ func (r sessionRow) layoutColumns(gtx layout.Context, theme *material.Theme) lay
 	)
 }
 
-// kindBar shows what a session was made of: says, emotes, OOC and PMs, in chat colors.
+// kindBar shows what a session was made of: says, emotes, OOC, faction chat and PMs, in chat colors.
 func kindBar(gtx layout.Context, summary chatlog.Summary) layout.Dimensions {
 	size := image.Pt(gtx.Dp(kindBarWidth), gtx.Dp(kindBarHeight))
 	defer clip.UniformRRect(image.Rectangle{Max: size}, size.Y/2).Push(gtx.Ops).Pop()
@@ -382,7 +382,7 @@ func kindBar(gtx layout.Context, summary chatlog.Summary) layout.Dimensions {
 	for _, part := range []struct {
 		count int
 		color color.NRGBA
-	}{{summary.Says, colorChatSay}, {summary.Emotes, colorChatEmote}, {summary.OOC, colorTimestamp}, {summary.PMs, colorChatPM}} {
+	}{{summary.Says, colorChatSay}, {summary.Emotes, colorChatEmote}, {summary.OOC, colorTimestamp}, {summary.Faction, colorChatFaction}, {summary.PMs, colorChatPM}} {
 		width := size.X * part.count / summary.Lines
 		paint.FillShape(gtx.Ops, part.color, clip.Rect(image.Rect(x, 0, x+width, size.Y)).Op())
 		x += width

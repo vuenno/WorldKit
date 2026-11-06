@@ -115,8 +115,9 @@ single-accent rule; use them only for chat text (and the session list's kind bar
 | Says [low]             | `#C6C4C4` | `colorChatLow`     |
 | Says [lower]           | `#939799` | `colorChatLower`   |
 | Whispers               | `#EDA841` | `colorChatWhisper` |
-| /me, /do               | `#C2A3DA` | `colorChatEmote`   |
+| /me, /do, `[!]` tag    | `#C2A3DA` | `colorChatEmote`   |
 | /b (OOC)               | `#B8BEC7` | `colorChatOOC`     |
+| /f (faction), stand-in | `#56D64B` | `colorChatFaction` |
 | PMs                    | `#FBF724` | `colorChatPM`      |
 | Session start header   | `#939799` | `colorChatHeader`  |
 
@@ -289,7 +290,7 @@ Fixed on the left, full height, `colorSidebar`, 1 dp `colorDivider` on its right
   divider, 12 dp radius, 14/16 dp padding, 8 dp apart. Columns: start time (Geist Mono
   16 sp Medium) over duration (tiny, tertiary) in 72 dp; date (14 sp SemiBold) over the
   characters (secondary, one line); line count (caption) over the **kind bar** (120×4 dp:
-  says, emotes, OOC, PMs in chat colors, OOC in `colorTimestamp`) in 140 dp; chevron.
+  says, emotes, OOC, faction chat, PMs in chat colors, OOC in `colorTimestamp`) in 140 dp; chevron.
 - Search matches a character's name or the start date.
 
 ## Log viewer
@@ -298,7 +299,7 @@ Fixed on the left, full height, `colorSidebar`, 1 dp `colorDivider` on its right
   "Session #12 · 113 lines · updated 18:45"; secondary **Copy all** (copy icon) at the right.
 - **Toolbar** (16 dp below, 36 dp controls, 10 dp apart, wrapping onto more rows in a narrow
   window): "Find in log" field (240 dp), the line-kind
-  segmented control **All · IC · /me · /do · /b · PMs** (one at a time; IC = says, shouts,
+  segmented control **All · IC · /me · /do · /b · /f · PMs** (one at a time; IC = says, shouts,
   whispers, /me, /do), a **Characters** button (people icon, count badge, chevron) that
   opens a floating menu of every speaker (checkbox, name, Geist Mono line count; most active
   first; 260 dp wide, up to 300 dp tall; click outside closes it); at the right, never

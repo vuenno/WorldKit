@@ -8,7 +8,7 @@ import (
 
 // Filter selects records by character and kind. Its zero value keeps every record.
 type Filter struct {
-	// Names keeps lines spoken by or mentioning any of these characters, ignoring case.
+	// Names keeps lines spoken by, said to or mentioning any of these characters, ignoring case.
 	// Underscores count as spaces, since names are typed as "John_Doe" in commands but shown
 	// as "John Doe". Empty keeps every character.
 	Names []string
@@ -44,9 +44,10 @@ func mentionsAnyName(record Record, names []string) bool {
 		return true
 	}
 	speaker := normalizeName(record.Speaker)
+	target := normalizeName(record.Target)
 	text := normalizeName(record.Text)
 	for _, name := range names {
-		if strings.Contains(speaker, name) || strings.Contains(text, name) {
+		if strings.Contains(speaker, name) || strings.Contains(target, name) || strings.Contains(text, name) {
 			return true
 		}
 	}

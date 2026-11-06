@@ -2,6 +2,7 @@ package screenshot
 
 import (
 	"image/color"
+	"strings"
 	"unicode"
 )
 
@@ -20,9 +21,13 @@ type Span struct {
 //
 // A marker opens only at the start of a word and closes only at the end of one, so
 // "and/or", "1/2" or the leading "* " of a /me line stay plain text.
+//
+// A leading "[!] " (after any timestamp), which GTA World puts before lines said to the
+// player, is drawn in the /me color too, as in game.
 const (
-	italicMarker = '/'
-	emoteMarker  = '*'
+	italicMarker    = '/'
+	emoteMarker     = '*'
+	highlightMarker = "[!] "
 )
 
 // styledRune is one character of a line with the style its markup gives it.
@@ -47,6 +52,7 @@ func ParseMarkup(text string, lineColor, emoteColor color.NRGBA) []Span {
 	}
 	markPairs(runes, italicMarker)
 	markPairs(runes, emoteMarker)
+	markHighlight(runes)
 	var spans []Span
 	for _, styled := range runes {
 		if styled.isRemoved {
@@ -68,6 +74,35 @@ func appendSpan(spans []Span, span Span) []Span {
 		return spans
 	}
 	return append(spans, span)
+}
+
+// markHighlight styles a leading "[!]" (after any timestamp) as an emote; the space after
+// it keeps the line's look.
+func markHighlight(runes []styledRune) {
+	plain := make([]rune, len(runes))
+	for i, styled := range runes {
+		plain[i] = styled.r
+	}
+	start := highlightStart(plain)
+	if start < 0 {
+		return
+	}
+	for i := start; i < start+len(highlightMarker)-1; i++ {
+		runes[i].isEmote = true
+	}
+}
+
+// highlightStart returns where a leading "[!] " starts in runes, after any timestamp, or
+// -1 when there is none.
+func highlightStart(runes []rune) int {
+	start := 0
+	if hasTimestamp(runes) {
+		start = timestampLength
+	}
+	if !strings.HasPrefix(string(runes[start:]), highlightMarker) {
+		return -1
+	}
+	return start
 }
 
 // markPairs finds each opening marker and the nearest closing one after it, styles the

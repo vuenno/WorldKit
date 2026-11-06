@@ -79,6 +79,17 @@ func TestDocumentMergeLines(t *testing.T) {
 			[]string{"John Doe shouts: Hey!", "", "John Doe shouts: Wait!"},
 			[]string{"John Doe shouts: Hey! Wait!"},
 		},
+		{
+			"highlighted and plain lines to the same person",
+			[]string{"[!] Jo Lee says [low] (to Mo Kay): X.", "Jo Lee says [low] (to Mo Kay): Y."},
+			[]string{"[!] Jo Lee says [low] (to Mo Kay): X. Y."},
+		},
+		{
+			"car whispers",
+			[]string{"(Car) Jo Lee whispers: X.", "(Car) Jo Lee whispers: Y."},
+			[]string{"(Car) Jo Lee whispers: X. Y."},
+		},
+		{"car and face to face", []string{"(Car) Jo Lee whispers: X.", "Jo Lee whispers: Y."}, nil},
 		{"different speakers", []string{"Mason Fletcher says: X.", "John Doe says: Y."}, nil},
 		{"same speaker, said differently", []string{"John Doe says: X.", "John Doe shouts: Y."}, nil},
 		{"an emote", []string{"* John Doe waves.", "* John Doe smiles."}, nil},

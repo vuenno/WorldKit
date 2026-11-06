@@ -12,14 +12,15 @@ func TestSummarize(t *testing.T) {
 [09:57:03] * John Doe waves at Jane Roe.
 [09:57:04] * The door is locked. (( Jane Roe ))
 [09:57:05] (( John Doe: brb ))
+[09:57:06] (( (364) Prospect John Doe: on my way ))
 [10:12:06] (( PM from (169) Jane Roe: hi ))`
 	records, err := Parse(strings.NewReader(text))
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := Summarize(records)
-	if got.Lines != 5 || got.Says != 1 || got.Emotes != 2 || got.OOC != 1 || got.PMs != 1 {
-		t.Errorf("counts = %+v, want 5 lines: 1 say, 2 emotes, 1 OOC, 1 PM", got)
+	if got.Lines != 6 || got.Says != 1 || got.Emotes != 2 || got.OOC != 1 || got.Faction != 1 || got.PMs != 1 {
+		t.Errorf("counts = %+v, want 6 lines: 1 say, 2 emotes, 1 OOC, 1 faction, 1 PM", got)
 	}
 	if len(got.Characters) != 2 || got.Characters[0].Name != "John Doe" {
 		t.Errorf("characters = %+v, want John Doe first of 2", got.Characters)

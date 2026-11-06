@@ -26,6 +26,19 @@ func TestParseClassifiesLines(t *testing.T) {
 		{"John Doe whispers: psst", KindWhisper, "John Doe", "psst"},
 		{"* John Doe waves.", KindMe, "John Doe", "waves."},
 		{"* The door is locked. (( John Doe ))", KindDo, "John Doe", "The door is locked."},
+		{"* The car is messy. (( John Doe ))*", KindDo, "John Doe", "The car is messy."},
+		{"John Doe says (to Jane Roe): hi", KindSay, "John Doe", "hi"},
+		{"John Doe says [low] (to Jane Roe): quiet", KindSay, "John Doe", "quiet"},
+		{"John Doe says (phone): hello?", KindSay, "John Doe", "hello?"},
+		{"John Doe shouts (to Jane Roe): hey!", KindShout, "John Doe", "hey!"},
+		{"John Doe whispers to Jane Roe: psst", KindWhisper, "John Doe", "psst"},
+		{"[!] John Doe says [low] (to Jane Roe): what's up?", KindSay, "John Doe", "what's up?"},
+		{"(( (364) John Doe: hi all ))", KindFaction, "John Doe", "hi all"},
+		{"(( (364) Prospect John Doe: hi ))", KindFaction, "John Doe", "hi"},
+		{"(( (462) Ring Leader John Doe: use sharex: it works ))", KindFaction, "John Doe", "use sharex: it works"},
+		{"(( (49) Affiliate Jo Roe: https://example.com/a ))", KindFaction, "Jo Roe", "https://example.com/a"},
+		{"(Car) Jane Roe whispers: nice ride", KindWhisper, "Jane Roe", "nice ride"},
+		{"(Radio) Jane Roe says [low]: copy", KindSay, "Jane Roe", "copy"},
 		{"[S: 1 | CH: 911] John Doe says: copy", KindUnknown, "", "[S: 1 | CH: 911] John Doe says: copy"},
 	}
 	for _, test := range tests {
@@ -41,6 +54,36 @@ func TestParseClassifiesLines(t *testing.T) {
 			}
 			if got.Raw != test.line {
 				t.Errorf("Raw = %q, want %q", got.Raw, test.line)
+			}
+		})
+	}
+}
+
+func TestParseReadsSpeechDetails(t *testing.T) {
+	tests := []struct {
+		line              string
+		wantTarget        string
+		wantVolume        Volume
+		wantIsHighlighted bool
+	}{
+		{"John Doe says: hi", "", VolumeNormal, false},
+		{"John Doe says (to Jane Roe): hi", "Jane Roe", VolumeNormal, false},
+		{"John Doe says [low]: hi", "", VolumeLow, false},
+		{"[10:00:00] [!] John Doe says [low] (to Jane Roe): hi", "Jane Roe", VolumeLow, true},
+		{"John Doe says [lower] (phone): hi", "", VolumeLower, false},
+		{"John Doe shouts (to Jane Roe): hey", "Jane Roe", VolumeNormal, false},
+		{"John Doe whispers to Jane Roe: psst", "Jane Roe", VolumeNormal, false},
+	}
+	for _, test := range tests {
+		t.Run(test.line, func(t *testing.T) {
+			records, err := Parse(strings.NewReader(test.line))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := records[0]
+			if got.Target != test.wantTarget || got.Volume != test.wantVolume || got.IsHighlighted != test.wantIsHighlighted {
+				t.Errorf("got target %q volume %d highlighted %v, want %q %d %v",
+					got.Target, got.Volume, got.IsHighlighted, test.wantTarget, test.wantVolume, test.wantIsHighlighted)
 			}
 		})
 	}

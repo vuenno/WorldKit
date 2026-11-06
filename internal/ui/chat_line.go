@@ -17,7 +17,8 @@ import (
 // column of its own when timestamps are on.
 type chatLine struct {
 	time     string // "09:57:03", or "" when hidden or the line has none
-	text     string // the line without its timestamp
+	marker   string // chatlog.HighlightMarker on highlighted lines, drawn in colorChatEmote; else ""
+	text     string // the line without its timestamp and marker
 	copyText string // what Copy and Extract use: the stored line, minus the timestamp when hidden
 	color    color.NRGBA
 }
@@ -29,6 +30,9 @@ func newChatLines(records []chatlog.Record, showsTimestamps bool) []chatLine {
 	for i, record := range records {
 		text := record.RawWithoutTimestamp()
 		line := chatLine{text: text, copyText: text, color: chatLineColor(record)}
+		if record.IsHighlighted {
+			line.marker, line.text = chatlog.HighlightMarker, strings.TrimPrefix(text, chatlog.HighlightMarker)
+		}
 		if showsTimestamps {
 			line.copyText = record.Raw
 			if text != record.Raw {
@@ -76,6 +80,15 @@ func (l chatLine) layoutColumns(gtx layout.Context, theme *material.Theme, shows
 			label.Color = colorTimestamp
 			return label.Layout(gtx)
 		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if l.marker == "" {
+				return layout.Dimensions{}
+			}
+			label := material.Label(theme, textSizeBody, l.marker)
+			label.Color = colorChatEmote
+			label.LineHeight = chatLineHeight
+			return label.Layout(gtx)
+		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			label := material.Label(theme, textSizeBody, l.text)
 			label.Color = l.color
@@ -98,10 +111,10 @@ func joinChatLines(lines []chatLine) string {
 func chatLineColor(record chatlog.Record) color.NRGBA {
 	switch record.Kind {
 	case chatlog.KindSay:
-		switch {
-		case strings.Contains(record.Raw, " says [low]: "):
+		switch record.Volume {
+		case chatlog.VolumeLow:
 			return colorChatLow
-		case strings.Contains(record.Raw, " says [lower]: "):
+		case chatlog.VolumeLower:
 			return colorChatLower
 		}
 		return colorChatSay
@@ -111,6 +124,8 @@ func chatLineColor(record chatlog.Record) color.NRGBA {
 		return colorChatEmote
 	case chatlog.KindOOC:
 		return colorChatOOC
+	case chatlog.KindFaction:
+		return colorChatFaction
 	case chatlog.KindPM:
 		return colorChatPM
 	case chatlog.KindHeader:

@@ -16,44 +16,74 @@ type Kind int
 const (
 	KindUnknown Kind = iota
 	KindHeader       // "[DATE: 18/OCT/2026 | TIME: 09:57:01]"
-	KindSay          // "John Doe says: hi" (also "says [low]:" and "says [lower]:")
-	KindShout        // "John Doe shouts: hey!"
-	KindWhisper      // "John Doe whispers: psst"
+	KindSay          // "John Doe says: hi"; also "says [low] (to Jane Roe):", see Volume and Target
+	KindShout        // "John Doe shouts: hey!"; also "shouts (to Jane Roe):"
+	KindWhisper      // "John Doe whispers: psst"; also "whispers to Jane Roe:"
 	KindMe           // "* John Doe waves."
-	KindDo           // "* The door is locked. (( John Doe ))"
+	KindDo           // "* The door is locked. (( John Doe ))*" (the trailing "*" is optional)
 	KindOOC          // "(( John Doe: brb ))"
 	KindPM           // "(( PM from (169) John Doe: hi ))"; Speaker is the other player
 	KindInfo         // "[INFO] You do not have a valid ID card..."
+	KindFaction      // "(( (364) Prospect John Doe: hi ))", /f; the rank is optional
 )
+
+// Volume is how loudly a "says" line was said.
+type Volume int
+
+// Speech volumes, from "says:", "says [low]:" and "says [lower]:".
+const (
+	VolumeNormal Volume = iota
+	VolumeLow
+	VolumeLower
+)
+
+// HighlightMarker starts lines GTA World highlights for the player, such as speech said to
+// them: "[!] Jane Roe says (to John Doe): hi". The game draws it in the /me color.
+const HighlightMarker = "[!] "
 
 // Record is one parsed chat line.
 type Record struct {
-	Line    int       // 1-based line number in the session
-	Time    time.Time // UTC; zero date when the session has no header
-	HasTime bool      // false when the line had no timestamp and inherited the previous one
-	Kind    Kind
-	Speaker string // empty when the kind has no speaker
-	Text    string // the message without timestamp, speaker or decoration
-	Raw     string // the line exactly as stored
+	Line          int       // 1-based line number in the session
+	Time          time.Time // UTC; zero date when the session has no header
+	HasTime       bool      // false when the line had no timestamp and inherited the previous one
+	Kind          Kind
+	Speaker       string // empty when the kind has no speaker
+	Target        string // who speech was said to: "Jane Roe" in "says (to Jane Roe):"; often empty
+	Volume        Volume // for KindSay
+	IsHighlighted bool   // the line starts with HighlightMarker
+	Text          string // the message without timestamp, speaker or decoration
+	Raw           string // the line exactly as stored
 }
 
-// lineRule recognises one kind of line. Its pattern may capture "speaker" and "text".
+// lineRule recognises one kind of line. Its pattern may capture "speaker", "target",
+// "volume" and "text".
 type lineRule struct {
 	kind    Kind
 	pattern *regexp.Regexp
 }
 
+// speechTail matches what may follow the verb of a speech line before its ": ": who it
+// was said to, "(to Jane Roe)", or how, "(phone)".
+const speechTail = `(?: \((?:to (?P<target>[^)]+)|[^)]+)\))?: (?P<text>.*)$`
+
+// speechChannel matches how speech reached the player when it isn't face to face:
+// "(Car) ", "(Radio) ".
+const speechChannel = `^(?:\([A-Za-z]+\) )?`
+
 // lineRules are tried in order; the first match wins, so specific rules come first.
 var lineRules = []lineRule{
 	{KindHeader, sessionHeaderPattern},
 	{KindPM, regexp.MustCompile(`^\(\( PM (?:from|to) \(\d+\) (?P<speaker>[^:]+): (?P<text>.*?) \)\)$`)},
+	// Faction ranks can be several words ("Ring Leader"); names are always "First Last"
+	// (the game requires Firstname_Lastname), so the speaker is the last two words.
+	{KindFaction, regexp.MustCompile(`^\(\( \(\d+\) (?:[^:]+ )?(?P<speaker>[^\s:]+ [^\s:]+): (?P<text>.*?) \)\)$`)},
 	{KindOOC, regexp.MustCompile(`^\(\( (?P<speaker>[^:()]+): (?P<text>.*?) \)\)$`)},
-	{KindDo, regexp.MustCompile(`^\* (?P<text>.+) \(\( (?P<speaker>[^()]+) \)\)$`)},
+	{KindDo, regexp.MustCompile(`^\* (?P<text>.+) \(\( (?P<speaker>[^()]+) \)\)\*?$`)},
 	{KindMe, regexp.MustCompile(`^\* (?P<speaker>\S+ \S+) (?P<text>.+)$`)},
 	{KindInfo, regexp.MustCompile(`^\[INFO\] (?P<text>.*)$`)},
-	{KindSay, regexp.MustCompile(`^(?P<speaker>[^\[*(][^:]*?) says(?: \[low\]| \[lower\])?: (?P<text>.*)$`)},
-	{KindShout, regexp.MustCompile(`^(?P<speaker>[^\[*(][^:]*?) shouts: (?P<text>.*)$`)},
-	{KindWhisper, regexp.MustCompile(`^(?P<speaker>[^\[*(][^:]*?) whispers(?: to [^:]+)?: (?P<text>.*)$`)},
+	{KindSay, regexp.MustCompile(speechChannel + `(?P<speaker>[^\[*(][^:]*?) says(?: \[(?P<volume>low|lower)\])?` + speechTail)},
+	{KindShout, regexp.MustCompile(speechChannel + `(?P<speaker>[^\[*(][^:]*?) shouts` + speechTail)},
+	{KindWhisper, regexp.MustCompile(speechChannel + `(?P<speaker>[^\[*(][^:]*?) whispers(?: to (?P<target>[^:(]+?))?(?: \([^)]+\))?: (?P<text>.*)$`)},
 }
 
 var timestampPattern = regexp.MustCompile(`^\[(\d{2}:\d{2}:\d{2})\] `)
@@ -101,6 +131,11 @@ func parseLine(raw string, clock *sessionClock) Record {
 		body = raw[len(match[0]):]
 		record.Text = body
 	}
+	if rest, isHighlighted := strings.CutPrefix(body, HighlightMarker); isHighlighted {
+		record.IsHighlighted = true
+		body = rest
+		record.Text = body
+	}
 	classify(&record, body)
 	return record
 }
@@ -112,13 +147,33 @@ func classify(record *Record, body string) {
 			continue
 		}
 		record.Kind = rule.kind
-		if i := rule.pattern.SubexpIndex("speaker"); i > 0 {
-			record.Speaker = strings.TrimSpace(match[i])
-		}
+		record.Speaker = strings.TrimSpace(namedGroup(rule.pattern, match, "speaker"))
+		record.Target = strings.TrimSpace(namedGroup(rule.pattern, match, "target"))
+		record.Volume = parseVolume(namedGroup(rule.pattern, match, "volume"))
 		if i := rule.pattern.SubexpIndex("text"); i > 0 {
 			record.Text = match[i]
 		}
 		return
+	}
+}
+
+// namedGroup returns what pattern's group name captured in match, or "" when the pattern
+// has no such group or it matched nothing.
+func namedGroup(pattern *regexp.Regexp, match []string, name string) string {
+	if i := pattern.SubexpIndex(name); i > 0 {
+		return match[i]
+	}
+	return ""
+}
+
+func parseVolume(volume string) Volume {
+	switch volume {
+	case "low":
+		return VolumeLow
+	case "lower":
+		return VolumeLower
+	default:
+		return VolumeNormal
 	}
 }
 
