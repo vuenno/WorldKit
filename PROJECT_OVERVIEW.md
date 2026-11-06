@@ -5,7 +5,7 @@ are. **Read this first, then `CLAUDE.md` (code rules) and `DESIGN.md` (visual ru
 Keep this file current: update it in the same change whenever features, structure or key
 decisions change.
 
-_Last updated: 2026-10-31_
+_Last updated: 2026-11-06_
 
 ## What it is
 
@@ -32,7 +32,7 @@ listed on the **Saved Screenshots** page.
 | Export           | Done: dialog with PNG (Lossless or Smaller file = reduced colors, 10–100 %) or JPEG (quality 10–100 %, default 92), presets (format + quality + canvas size, saved from the dialog, default in Settings), Save As (only the chosen type), rendered off the UI goroutine, toast with Show in folder |
 | Saved Screenshots| Done: every export (from `exports.json`) grouped by day: thumbnail, name, folder, size, format, file size; detail view; Show in folder; Delete (confirmed; only listed, unchanged files); missing files can be removed from the list |
 | Logs page        | Done: "Live now" card for the session being captured; sessions grouped Today / Yesterday / Earlier this week / month, each with start time, duration, characters, line count and a kind bar; search by character or date |
-| Log viewer       | Done: always-visible toolbar (find text, kind segments All/IC/me/do/b/PMs, Characters menu, timestamps switch), filter chips + Clear filters, timestamp column, drag/Shift+click/Ctrl+A/Esc selection, floating selection bar (Copy, **Extract image**, ×), toasts ("Screenshot saved · View" opens it) |
+| Log viewer       | Done: always-visible toolbar (find text, kind segments All/IC/me/do/b/f/PMs, Characters menu, timestamps switch), filter chips + Clear filters, timestamp column, drag/Shift+click/Ctrl+A/Esc selection, floating selection bar (Copy, **Extract image**, ×), toasts ("Screenshot saved · View" opens it) |
 | Extract dialog   | Done: **Extract image** opens a modal with a live preview, the Transparent/Dark/Light backdrop, the game's chat look as set in its settings — **Font** (Arial · Mukta) and **Chat scale** (50–150 %, steps of 5, default 100; the image grows with it) — and **Max width** (200–1800 px; lines wrap to fit, default the in-game chat width at any scale); "Save as they are, or edit them first?" → **Edit** makes the preview itself editable: drag/Shift+click/Ctrl+A to select text on the image, **Italic**, a color picker (chat colors) and **Default** apply to it; click and type, Backspace/Delete/Enter, arrows/Home/End, Ctrl+Z undo; **reorder lines** by dragging the grip beside each (or Alt+Up/Down); **Merge lines** joins the selected lines one person said ("X says: A." + "X says: B." → "X says: A. B."); **presets** of background, chat font and scale, and max width (older font-size presets get the nearest scale): pick one in the dialog, **Save as preset…**, the default one applies to the first extract; **Copy image** (or Ctrl+C while the dialog is open) puts exactly what Save image would write on the clipboard (dialog stays open, toast "Image copied to clipboard") |
 | Screenshot look  | Done: markup `/italic/` and `*action*` (in the /me color), markers removed; Dark/Light backdrops are a box behind each row of text, transparent elsewhere |
 | Log Screenshots  | Done: gallery grouped by day, checkerboard 1:1 previews, hover actions (Show in folder, Delete); detail view with a Transparent/Dark/Light preview (boxes behind the text rows), **Copy image** (on the chosen background) and details; delete with confirmation |
@@ -40,7 +40,7 @@ listed on the **Saved Screenshots** page.
 | Auto-update      | Done: at startup and about once a day (`update.CheckInterval`, 20 h; failures retried after an hour, only logged) asks GitHub for the latest `v<version>` release of `vuenno/WorldKit` and compares it as semver with the build's version (a `dev` build never checks); a card in the page area's bottom-left offers it (**Update now**, **Later** = 24 h, **Skip this version**, **Release notes**); Update now downloads `WorldKit-Setup-<version>.exe` to `%TEMP%\WorldKit-update`, checks its size and SHA-256 (the release's `.sha256` asset), runs it silently and quits; the installer waits for WorldKit to exit, upgrades in place and starts it again. Not yet tried end to end with two real releases |
 | Branding         | Done: logo in sidebar header, exe/taskbar icon                         |
 | Chat capture     | Done: background polling of FiveM's KVS, one `.txt` per session, crash-safe appends |
-| Chat parsing     | Done: `chatlog.Parse` → records with time, kind, speaker, text; `chatlog.Filter`; `chatlog.Summarize` |
+| Chat parsing     | Done: `chatlog.Parse` → records with time, kind (incl. /f faction chat), speaker, target, volume, `[!]` highlight, text; `chatlog.Filter`; `chatlog.Summarize` |
 | First-run prompts| Done: FiveM data folder (only if not found; Browse… or type), start with Windows (asked once) |
 | Persistence      | `%AppData%\WorldKit\settings.json` (incl. export folder and presets, last update check, skipped/Later answers), `%AppData%\WorldKit\exports.json` (the export list), `%AppData%\WorldKit\logs\YYYY\MM\*.txt`, `%AppData%\WorldKit\screenshots\*.png`, `%AppData%\WorldKit\diagnostics\` (`app.log`, `crash-*.log`, `update-install.log`); exports wherever the user saves them (default `Pictures\WorldKit`) |
 | Releases         | Done: manual **Release** workflow (`.github/workflows/release.yml`) runs the checks, builds with the typed version and publishes an Inno Setup installer and its `.sha256` under a new `v<version>` tag |
@@ -325,7 +325,7 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   where the line lands, and the whole line moves (Alt+Up/Down does the same from the
   keyboard). Merge lines works on the lines the selection touches: it needs two or more
   with text, every one "speech" with the same prefix up to the first ": " once a leading
-  `[HH:MM:SS] ` is skipped ("Mason Fletcher says: "), and lines starting with `*`, `(` or
+  `[HH:MM:SS] ` and `[!] ` are skipped ("Mason Fletcher says: "), and lines starting with `*`, `(` or
   `[` (emotes, OOC, [INFO]) never count, mirroring chatlog's says/shouts/whispers rules.
   So "says" and "shouts" by one person don't merge, which keeps the result truthful. The
   first line keeps its timestamp; later lines add their words after a space, styles
@@ -363,11 +363,11 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
   shown at 1 image px per screen px so text stays as crisp as in the file (no resampling).
 - **Chat colors come from the GTA World Chatlog Magician**
   (github.com/flipperatol121/chatlog-magician, the FiveM-era fork), which recreates the in-game
-  chat. One color per line (`says [low]` light gray `#C6C4C4`, `says [lower]` darker gray
+  chat. One color per line, except a leading `[!]` (lines said to you) drawn in the /me color (`says [low]` light gray `#C6C4C4`, `says [lower]` darker gray
   `#939799`, as the Magician draws them): `[INFO]` lines are white, although the game draws the `[INFO]` tag
   blue; "near you" vs "far" brightness for says is not modeled.
 - **Filters are always visible** above the log (redesign): a find field, one line kind at a
-  time (**All · IC · /me · /do · /b · PMs**; **IC** = says, shouts, whispers, `/me` and `/do`),
+  time (**All · IC · /me · /do · /b · /f · PMs**; **IC** = says, shouts, whispers, `/me` and `/do`),
   and characters from a menu, shown as removable chips. Characters combine with OR; kind,
   characters and find text with AND. A single kind is simpler to read than the old
   multi-toggle panel, and the filters' state is visible without opening anything.
@@ -446,6 +446,13 @@ Gio is immediate-mode: every frame, `Layout` methods handle input first, then dr
 - **Chat log quirks:** the KVS value is rewritten whole on every line and replaced on reconnect,
   so anything not captured before the next connect is gone. Line kinds are recognised only by
   text patterns (`says:`, `* `, `(( … ))`, `[INFO]`); unknown lines stay `KindUnknown`.
+  Real lines are messier than the obvious form: /do ends `(( Name ))*`, speech may read
+  `says [low] (to Jane Roe):` or `says (phone):`, and lines said to you start `[!] `
+  (`Record.IsHighlighted`; `Target` and `Volume` are kept). Speech heard through something
+  starts `(Car) ` or `(Radio) `. Faction chat (/f) reads `(( (364) Rank First Last: hi ))`
+  with an optional, possibly multi-word rank; the speaker is taken as the last two words,
+  since GTA World names are always Firstname_Lastname. Its color is set per faction in game,
+  so WorldKit uses a stand-in green.
 - **Not yet verified:** copying the KVS while FiveM is running (a sharing violation is logged and
   retried on the next poll), and whether the game caps the chat buffer size.
 - **`-race` needs CGO**, which the dev machine lacks, so race tests can't run locally.

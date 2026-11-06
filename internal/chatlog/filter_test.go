@@ -13,7 +13,8 @@ const filterSession = `[DATE: 18/OCT/2026 | TIME: 09:57:01]
 [09:57:05] (( Jane Roe: brb ))
 [09:57:06] * John Doe looks at Jane Roe.
 [09:57:07] Mark Lee shouts: hey!
-[09:57:08] john_doe whispers: psst`
+[09:57:08] john_doe whispers: psst
+[09:57:09] Mark Lee says (to Jane Roe): yo`
 
 func parseFilterSession(t *testing.T) []Record {
 	t.Helper()
@@ -31,12 +32,12 @@ func TestFilterApply(t *testing.T) {
 		filter    Filter
 		wantLines []int
 	}{
-		{"zero filter keeps everything", Filter{}, []int{1, 2, 3, 4, 5, 6, 7, 8}},
-		{"name matches speaker and mentions", Filter{Names: []string{"jane roe"}}, []int{3, 5, 6}},
-		{"underscores match spaces", Filter{Names: []string{" Jane_Roe "}}, []int{3, 5, 6}},
-		{"partial name", Filter{Names: []string{"jane"}}, []int{2, 3, 5, 6}},
-		{"several names match any", Filter{Names: []string{"Mark Lee", "Jane Roe"}}, []int{3, 5, 6, 7}},
-		{"blank names are ignored", Filter{Names: []string{" "}}, []int{1, 2, 3, 4, 5, 6, 7, 8}},
+		{"zero filter keeps everything", Filter{}, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}},
+		{"name matches speaker, target and mentions", Filter{Names: []string{"jane roe"}}, []int{3, 5, 6, 9}},
+		{"underscores match spaces", Filter{Names: []string{" Jane_Roe "}}, []int{3, 5, 6, 9}},
+		{"partial name", Filter{Names: []string{"jane"}}, []int{2, 3, 5, 6, 9}},
+		{"several names match any", Filter{Names: []string{"Mark Lee", "Jane Roe"}}, []int{3, 5, 6, 7, 9}},
+		{"blank names are ignored", Filter{Names: []string{" "}}, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}},
 		{"one kind", Filter{Kinds: []Kind{KindMe}}, []int{3, 6}},
 		{"several kinds", Filter{Kinds: []Kind{KindDo, KindOOC}}, []int{4, 5}},
 		{"name and kind", Filter{Names: []string{"John Doe"}, Kinds: []Kind{KindMe, KindDo}}, []int{4, 6}},
@@ -60,7 +61,7 @@ func TestCharacters(t *testing.T) {
 	want := []Character{
 		{Name: "John Doe", LineCount: 4},
 		{Name: "Jane Roe", LineCount: 2},
-		{Name: "Mark Lee", LineCount: 1},
+		{Name: "Mark Lee", LineCount: 2},
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)

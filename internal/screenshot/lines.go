@@ -116,23 +116,45 @@ func (d *Document) linesBetween(first, last int) []docLine {
 const timestampLength = len("[00:00:00] ")
 
 // speechPrefix finds a speech line's speaker part, "Mason Fletcher says: ", as character
-// indices start..end; start skips a leading timestamp, so lines said at different times
-// still match. Lines that start with "*", "(" or "[" (emotes, OOC, [INFO]) aren't speech,
-// matching how chatlog recognises says, shouts and whispers.
+// indices start..end; start skips a leading timestamp and "[!] ", so lines said at
+// different times, or only some of them to the player, still match. The prefix keeps a
+// "(Car) " or "(Radio) " channel. Lines that start with "*", "(" or "[" (emotes, OOC,
+// [INFO]) aren't speech, matching how chatlog recognises says, shouts and whispers.
 func speechPrefix(chars []Char) (start, end int, ok bool) {
 	runes := runesOf(chars)
 	if hasTimestamp(runes) {
 		start = timestampLength
 	}
-	if start >= len(runes) || slices.Contains([]rune("*(["), runes[start]) {
+	if highlightStart(runes) >= 0 {
+		start += len(highlightMarker)
+	}
+	speaker := start + channelLength(runes[start:])
+	if speaker >= len(runes) || slices.Contains([]rune("*(["), runes[speaker]) {
 		return 0, 0, false
 	}
-	for i := start; i+1 < len(runes); i++ {
+	for i := speaker; i+1 < len(runes); i++ {
 		if runes[i] == ':' && runes[i+1] == ' ' {
 			return start, i + 2, true
 		}
 	}
 	return 0, 0, false
+}
+
+// channelLength returns the length of a leading "(Car) " or "(Radio) " (a word of letters
+// in parentheses, then a space), or 0 when runes don't start with one.
+func channelLength(runes []rune) int {
+	if len(runes) == 0 || runes[0] != '(' {
+		return 0
+	}
+	for i := 1; i+1 < len(runes); i++ {
+		switch {
+		case runes[i] == ')' && i > 1 && runes[i+1] == ' ':
+			return i + 2
+		case !unicode.IsLetter(runes[i]):
+			return 0
+		}
+	}
+	return 0
 }
 
 // hasTimestamp reports whether runes start with "[HH:MM:SS] ".

@@ -43,8 +43,9 @@ var (
 	colorChatLow     = rgb(0xC6C4C4) // says [low]
 	colorChatLower   = rgb(0x939799) // says [lower]: quieter, so darker
 	colorChatWhisper = rgb(0xEDA841)
-	colorChatEmote   = rgb(0xC2A3DA) // /me and /do
-	colorChatOOC     = rgb(0xB8BEC7) // /b
+	colorChatEmote   = rgb(0xC2A3DA)  // /me and /do
+	colorChatOOC     = rgb(0xB8BEC7)  // /b
+	colorChatFaction = colorChatGreen // /f: each faction picks its own color in game, so a stand-in
 	colorChatPM      = rgb(0xFBF724)
 	colorChatHeader  = rgb(0x939799) // session start line
 )

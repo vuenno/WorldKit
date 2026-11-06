@@ -10,6 +10,7 @@ type Summary struct {
 	Says       int         // says, shouts, whispers, server and other lines
 	Emotes     int         // /me and /do
 	OOC        int         // /b
+	Faction    int         // /f
 	PMs        int
 	First      time.Time // the first timestamp; zero when the session has none
 	Last       time.Time // the last timestamp
@@ -43,6 +44,8 @@ func Summarize(records []Record) Summary {
 			summary.Emotes++
 		case KindOOC:
 			summary.OOC++
+		case KindFaction:
+			summary.Faction++
 		case KindPM:
 			summary.PMs++
 		default:

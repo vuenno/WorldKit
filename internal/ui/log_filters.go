@@ -24,8 +24,8 @@ type kindChoice struct {
 	kinds []chatlog.Kind // nil keeps every kind
 }
 
-// inCharacterKinds is everything said or done in character: all lines except OOC (/b), PMs
-// and server messages.
+// inCharacterKinds is everything said or done in character: all lines except OOC (/b),
+// faction chat (/f), PMs and server messages.
 var inCharacterKinds = []chatlog.Kind{
 	chatlog.KindSay, chatlog.KindShout, chatlog.KindWhisper, chatlog.KindMe, chatlog.KindDo,
 }
@@ -36,6 +36,7 @@ var kindChoices = []kindChoice{
 	{label: "/me", kinds: []chatlog.Kind{chatlog.KindMe}},
 	{label: "/do", kinds: []chatlog.Kind{chatlog.KindDo}},
 	{label: "/b", kinds: []chatlog.Kind{chatlog.KindOOC}},
+	{label: "/f", kinds: []chatlog.Kind{chatlog.KindFaction}},
 	{label: "PMs", kinds: []chatlog.Kind{chatlog.KindPM}},
 }
 
